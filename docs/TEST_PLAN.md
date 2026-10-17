@@ -1,54 +1,47 @@
 # OMP Oracle test plan
 
-The validation ladder for `omp-oracle`, cheapest first. Run the narrowest rung that answers
-the question; the full gate lives in [Release](RELEASE.md).
+Run the narrowest validation check that proves your change in Oh My Pi ("OMP") or `pi`, starting with the local gate and adding live or cross-platform runs only when the changed surface requires them.
+Companion docs: [Architecture](ARCHITECTURE.md) · [Operations](OPERATIONS.md) · [Platform smoke](PLATFORM_SMOKE.md) · [Release](RELEASE.md)
 
-| Rung | Command or procedure | Proves |
+## Which check to run
+
+| Situation | Command or procedure | What it proves |
 | --- | --- | --- |
-| Local gate | `npm run verify:oracle` | Syntax and bundle checks, helper and native-host tests, the site coherence test (every asset a site page references is deployed, asset changes redeploy, the `og:image` size matches `og.png`, sitemap and canonical links agree), the three typecheck projects (extension, worker helpers, worker runtime), the isolated sanity harness (config, locks, queueing, worker, tool schemas, documentation contracts), and `npm pack --dry-run` |
-| Native Pi status smoke | `node --test scripts/oracle-native.test.mjs` | The locally installed Pi loads this package in an isolated persisted JSON-mode session and dispatches empty-project `/oracle-status`, producing one successful display-marked response without a fetch attempt or browser job. Included in `test:oracle-helpers`; no provider credentials or dependency-baseline upgrade required. This does not qualify TUI rendering, print-mode output, or non-empty job summaries. |
-| Collection proof | `npm run proof:capture` | Against an owned headless Chromium and a loopback fixture server, no account or network: delayed composer hydration and restored-draft replacement for both the earlier `#prompt-textarea` editor and the redesigned `Ask ChatGPT` textbox, exact code payload capture, message-identity binding across shifted indices, nested code blocks, generic artifact download, the sandboxed report frame's host-delegated native Markdown export through pre-armed download events (bytes identical to the file Chrome saved), the report container excluded from download candidates, report chrome and citation pills and diagrams rendered as declared gaps, the widget state's Markdown and references resolved into footnotes, a completion wait whose tab another client moved to a finished foreign conversation (no completion until the job's own turn finishes, one `navigation` event), a failed capture that writes no response and marks `recollectionNeeded`, anchored recollection through the archive turn and its refusals, a control wait without animation frames, the prompt send states, idempotent recollection that preserves earlier bytes, recollection admission timestamps, and driver teardown serialization |
-| Isolated `pi` session smoke | [below](#isolated-pi-session-smoke) | The local extension loads through the real `pi` CLI; whole-repo archives exclude local tool state; symlink escapes are rejected; exercised agents give candid feedback |
-| Auth recovery drill | [below](#auth-recovery-drill) | A broken auth seed fails as a clean auth error, `/oracle-auth` repairs it, and the next job succeeds |
-| Platform matrix | [`docs/PLATFORM_SMOKE.md`](PLATFORM_SMOKE.md) | Packed install, load, and `oracle_submit` on macOS and Ubuntu through Crabbox (Windows native available, not required) |
-| ChatGPT preset proof | `npm run release:proof:chatgpt-presets` | Fresh loaded-extension jobs for every canonical preset |
-
-Companion docs: [Architecture](ARCHITECTURE.md) · [Operations](OPERATIONS.md) ·
-[Release](RELEASE.md)
+| Everyday local iteration (local gate) | `npm run verify:oracle` (`npm test` is an alias) | Runs, in order: syntax and bundle checks (`npm run check:oracle-extension`), platform-smoke invariants (`npm run check:platform-smoke`), helper unit tests (`npm run test:oracle-helpers`), the site coherence test (`npm run test:site`: every asset a site page references is deployed, asset changes redeploy, `og:image` dimensions match `og.png`, and sitemap, `robots.txt`, and canonical links agree), the documentation link check (`npm run test:docs`: every relative Markdown link, heading fragment, and link into this repository from the documentation or site resolves), the three typecheck projects (`npm run typecheck`, `npm run typecheck:worker-helpers`, `npm run typecheck:worker-runtime`), the isolated sanity harness (`npm run sanity:oracle`: config, locks, queueing, worker, tool schemas, and pinned documentation literals), and `npm pack --dry-run` (`npm run pack:check`). Hosted CI runs only this local gate. |
+| Native Pi status smoke | `node --test scripts/oracle-native.test.mjs` | The locally installed `pi` loads this package in an isolated persisted JSON-mode session and dispatches empty-project `/oracle-status`, producing one successful display-marked response without a fetch attempt or browser job. Included in `npm run test:oracle-helpers`; requires no provider credentials or dependency-baseline upgrade. Does not qualify TUI rendering, print-mode output, or non-empty job summaries. |
+| Collection proof | `npm run proof:capture` | Against an owned headless Chromium and a loopback fixture server, with no account or network: delayed composer hydration and restored-draft replacement for both the `#prompt-textarea` editor and the `Ask ChatGPT` textbox, exact code payload capture, message-identity binding across shifted indices, nested code blocks, generic artifact download, the sandboxed report frame's host-delegated native Markdown export through pre-armed download events (bytes identical to the file Chrome saved), the report container excluded from download candidates, report chrome, citation pills, and diagrams rendered as declared gaps, widget-state Markdown and references resolved into footnotes, a completion wait whose tab another client moved to a finished foreign conversation (no completion until the job's own turn finishes, one `navigation` event), a failed capture that writes no response and marks `recollectionNeeded`, anchored recollection through the archive turn and its refusals, a control wait without animation frames, prompt send states (`not_sent`, `attempted`, `accepted`), idempotent recollection that preserves earlier bytes, recollection admission timestamps, and driver teardown serialization. |
+| Platform-focused syntax and invariant sanity | `npm run check:platform-smoke`, `npm run sanity:oracle:platform`, or `npm run verify:oracle:platform` | Crabbox harness invariants, real-smoke script syntax, platform-sensitive sanity assertions, and `npm pack --dry-run` pass before launching containers or VMs. |
+| Runtime or extension code change | [Isolated `pi` session smoke](#isolated-pi-session-smoke) | The local extension loads in an isolated `pi` or `omp --standard` session; whole-repo archives exclude local tool state by default; symlink escapes are rejected; exercised agents give candid friction feedback. `npm run smoke:real:source` only checks inner-loop source loading and is not a substitute. |
+| Managed-browser change | [Managed browser mode](#managed-browser-mode) | `browser.chatGptManagedProfileDir` launch, attach, per-command browser-identity checks, and the idle keeper quit succeed in an isolated state directory. |
+| Auth seed or bootstrap change | [Auth recovery drill](#auth-recovery-drill) and [Auth timeout check](#oracle-auth-timeout-when-agent-browser-hangs) | An unauthenticated or missing seed directory is refused at submission before creating an archive or job, `/oracle-auth` repairs the seed and fails fast when `agent-browser` hangs, and the next job completes. |
+| Platform-sensitive change | `npm run smoke:platform:doctor`, then `node scripts/platform-smoke.mjs run --target <target> --suite <suite>` ([Platform smoke](PLATFORM_SMOKE.md)) | Target setup is ready and the affected target (`macos`, `ubuntu`, or optional `windows-native`) and suite (`platform-build` or `real-extension`) pass when changes touch archive packing, process cleanup, runtime or browser profile handling, package metadata, or the Crabbox harness. |
+| Platform matrix proof | `npm run smoke:platform:all` ([Platform smoke](PLATFORM_SMOKE.md)) | Doctor-first packed-install `platform-build` and `real-extension` (`npm run smoke:real:packed`) suites pass on the required `macos` and `ubuntu` Crabbox lanes on Node 24+. |
+| ChatGPT preset proof (check vs produce) | `npm run release:proof:chatgpt-presets` (check) or `npm run release:proof:chatgpt-presets:run` (produce) ([Release](RELEASE.md#chatgpt-preset-proof)) | Required before release and for any change touching ChatGPT model selection or UI. The runner submits live loaded-extension jobs for the eight canonical model presets (`deep_research` is excluded because each run consumes a Deep Research task) and writes `.artifacts/chatgpt-preset-proof/latest.json`; the checker verifies that file against persisted `job.json`, worker log, and response files. |
+| Publish / release gate | `npm run release:check` ([Release](RELEASE.md#release-gate)) | Runs `npm run verify:oracle`, `npm run release:proof:chatgpt-presets`, and `npm run smoke:platform:all` (also enforced by `prepublishOnly`). |
+| Brand artwork (`assets/*.html`) | `npm run render:assets`, then `npm run render:assets -- --check` ([Branding](BRANDING.md)) | Re-renders `assets/banner.png` and `assets/og.png` from `assets/*.html` and verifies dimensions and same-machine byte equality. |
 
 ## Isolated `pi` session smoke
 
-This section describes the repeatable pre-commit smoke test for validating `omp-oracle` through isolated `pi` agent sessions that load the local extension source.
+Use this repeatable pre-commit workflow for code changes when you need end-to-end evidence beyond `npm test`. It validates that:
 
-Use this workflow for code changes when you need end-to-end evidence beyond `npm test`.
-
-### What this validates
-
-- the local extension can be loaded directly by isolated `pi` sessions
-- whole-repo `oracle_submit` archive creation excludes local tool state by default
-- targeted archive inputs cannot escape the repo through symlinked paths
-- the exercised `pi` agents can provide candid feedback about tool clarity or clunkiness
+- isolated `pi` or `omp --standard` sessions load the local extension source directly;
+- whole-repo `oracle_submit` archive creation excludes local tool state by default;
+- targeted archive inputs cannot escape the repository through symlinked paths;
+- the exercised agents return candid feedback about tool clarity or clunkiness.
 
 ### Why this workflow is isolated
 
-The test intentionally uses separate directories for:
+Each run uses separate directories for `PI_CODING_AGENT_DIR`, `--session-dir`, and `PI_ORACLE_JOBS_DIR` so validation never reuses or mutates your normal agent state.
 
-- `PI_CODING_AGENT_DIR`
-- `--session-dir`
-- `PI_ORACLE_JOBS_DIR`
-
-That keeps the validation run from reusing your normal `pi` agent state.
-
-The extension is loaded from the local checkout with:
+To load the in-repo extension in `pi` rather than a globally installed package, pass `--approve --no-extensions -e`:
 
 ```bash
 pi --approve --no-extensions -e "$REPO/extensions/oracle/index.ts"
 ```
 
-That ensures the session is exercising the in-repo code, not a globally installed package. `--approve` is intentional for this isolated workflow on Pi 0.79+: the test fixture is this trusted checkout, and non-interactive/scripted validation must not block on the project-trust prompt.
+`--approve` is intentional for this isolated workflow on `pi` 0.79+: the test fixture is this trusted checkout, and scripted validation must not block on the project-trust prompt.
 
-On Oh My Pi the launcher owns extension arguments and refuses `-e`; the equivalent non-interactive
-route is the standard launcher in print mode:
+On Oh My Pi the default launcher owns extension arguments and refuses `-e`. Use the standard launcher in print mode to validate the in-repo extension non-interactively:
 
 ```bash
 env PI_CODING_AGENT_DIR="$TEST1_AGENT" PI_ORACLE_JOBS_DIR="$TEST1_JOBS" PI_TELEMETRY=0 \
@@ -56,53 +49,29 @@ env PI_CODING_AGENT_DIR="$TEST1_AGENT" PI_ORACLE_JOBS_DIR="$TEST1_JOBS" PI_TELEM
   --model <model id> --thinking low --no-extensions -e "$REPO/extensions/oracle/index.ts" "$PROMPT1" < /dev/null
 ```
 
-Three details matter: print mode waits forever on an open piped stdin (`readPipedInput`), so close
-it; `oracle_submit` refuses `--no-session`, so keep a persisted `--session-dir`; and the isolated
-`PI_CODING_AGENT_DIR` carries no model configuration, so put a `models.yml` for the chosen model in
-it (a zero-cost local model works). `npm run release:proof:chatgpt-presets:run` automates exactly
-this route for the release preset proof.
+Three details matter: print mode waits forever on an open piped stdin (`readPipedInput`), so close stdin with `< /dev/null`; `oracle_submit` refuses `--no-session`, so keep a persisted `--session-dir`; and the isolated `PI_CODING_AGENT_DIR` carries no model configuration, so copy a `models.yml` for the chosen model into it (a zero-cost local model works). `npm run release:proof:chatgpt-presets:run` automates this route for the release preset proof.
 
-The local extension now intercepts TUI `/oracle` and `/oracle-followup` before prompt-template expansion, re-injects the compact slash request as the visible user message for prompt-history/up-arrow recall, and reads the in-repo prompt files as hidden dispatch instructions, so do not pass `--prompt-template` for normal local-extension validation. In print/json/rpc modes, the extension contributes the prompt templates itself.
+The local extension intercepts TUI `/oracle` and `/oracle-followup` before prompt-template expansion, re-injects the compact slash request as the visible user message for prompt-history and up-arrow recall, and reads the in-repo prompt files as hidden dispatch instructions, so do not pass `--prompt-template` for normal local-extension validation. In print, JSON, and RPC modes, the extension contributes the prompt templates itself.
 
-Do not add this repository's GitHub URL to `.pi/settings.json` just to test local oracle changes. If you already keep upstream `npm:pi-oracle` or a published `omp-oracle` installed globally, mixing that package with a project-local git package creates two distinct package identities and can trigger prompt/tool conflicts. Use the explicit CLI extension flag above instead.
+Do not add this repository's GitHub URL to `.pi/settings.json` to test local changes. If you keep upstream `npm:pi-oracle` or a published `omp-oracle` installed globally, mixing that package with a project-local git package creates two distinct package identities and can trigger prompt or tool conflicts. Use the explicit `-e` CLI flag instead.
 
-`oracle_submit` now preflights missing, unreadable, or unverified auth seed profiles before it creates an archive or persists a job. For archive-inspection smoke tests that intentionally run without real auth, use `oracle_preflight` for the blocker path or create a test seed only in a purpose-built fixture that includes the `.oracle-seed-generation` marker.
+`oracle_submit` preflights missing, unreadable, or unverified auth seed profiles before it creates an archive or persists a job. For archive-inspection smoke tests that intentionally run without real auth, use `oracle_preflight` for the blocker path or create a test seed only in a purpose-built fixture with a non-empty timestamped `.oracle-seed-generation` marker.
 
-### Preset requirements
+### Preset choice
 
-For ordinary pre-commit isolated smoke tests, use either:
+For pre-commit isolated smoke tests, use `instant` or `thinking_light`. The examples below use `instant` because it is the fastest smoke-test preset; to switch to `thinking_light`, replace `preset "instant"` with `preset "thinking_light"` in both prompts.
 
-- `instant`
-- `thinking_light`
-
-The examples below use `instant` because it is the fastest smoke-test preset.
-
-For any release, and for any change that touches ChatGPT model selection, run live loaded-extension jobs for every canonical ChatGPT preset from `ORACLE_SUBMIT_PRESETS`:
-
-- `pro_standard`
-- `pro_extended`
-- `thinking_light`
-- `thinking_standard`
-- `thinking_extended`
-- `thinking_heavy`
-- `instant`
-- `instant_auto_switch`
-
-Use prompts that make each saved response contain exact markers `PRESET <preset> OK` and `PACKAGE omp-oracle`. Save the completed job ids/job directories in `.artifacts/chatgpt-preset-proof/latest.json` only after every job completes; `validatedAt` must be later than those completed jobs. The checker reads the actual persisted `job.json`, worker log, and response files. Then run:
+For any release, and for any change that touches ChatGPT model selection or UI, run live loaded-extension jobs for all eight canonical model presets in `ORACLE_SUBMIT_PRESETS` (`pro_standard`, `pro_extended`, `thinking_light`, `thinking_standard`, `thinking_extended`, `thinking_heavy`, `instant`, `instant_auto_switch`; `deep_research` is excluded because each run consumes a Deep Research task). Each prompt must make the saved response contain the exact markers `PRESET <preset> OK` and `PACKAGE omp-oracle`. Save the completed job ids and job directories in `.artifacts/chatgpt-preset-proof/latest.json` only after every job completes, with `validatedAt` later than those completed jobs, and verify the proof against the persisted `job.json`, worker log, and response files ([Release](RELEASE.md#chatgpt-preset-proof)):
 
 ```bash
 npm run release:proof:chatgpt-presets
 ```
 
-`npm run release:check` runs that proof gate before release. This is intentional: publishing is blocked until every ChatGPT preset has fresh loaded-extension evidence.
-
-### Prerequisites
-
-- `pi` installed locally
-- `tmux` installed locally
-- run from the repository root
-
 ### Repeatable smoke test
+
+Prerequisites: `pi` and `tmux` installed locally; run from the repository root.
+
+The script below runs two isolated `pi` sessions in `tmux` to validate whole-repo archive default exclusions (`TEST1`) and symlink-escape rejection (`TEST2`), and asks each agent for candid feedback:
 
 ```bash
 set -euo pipefail
@@ -195,54 +164,50 @@ find "$TEST2_JOBS" -maxdepth 1 -type d -name 'oracle-*' | sort || true
 echo "TEST_ROOT=$TEST_ROOT"
 ```
 
-### Expected results
+### Expected observations
 
-#### Test 1: whole-repo archive exclusions
+**Test 1 (whole-repo archive default exclusions):**
 
-Expected behavior:
+- Expected: the isolated `pi` session loads the local extension and `oracle_submit` creates a job and archive path under `$TEST1_JOBS`.
+- Expected: expanding `.` excludes `.pi/`, `.oracle-context/`, `.cursor/`, and `.scratchpad.md` (`MISSING`), and includes normal repository files such as `README.md` (`FOUND`).
+- Why the fixture writes `.oracle-seed-generation`: this smoke test does not require `/oracle-auth`, but `oracle_submit` rejects missing or unverified seed profiles before archiving; an empty marker (`touch`) counts as unverified and is rejected at submit time. With a timestamped marker-only seed profile, the worker fails later due to missing real auth, leaving the archive on disk for inspection.
 
-- the isolated `pi` session loads the local extension successfully
-- `oracle_submit` creates a job and an archive path under the isolated jobs dir
-- the archive should exclude:
-  - `.pi/`
-  - `.oracle-context/`
-  - `.cursor/`
-  - `.scratchpad.md`
-- the archive should still include normal repo files such as `README.md`
+**Test 2 (symlink escape rejection):**
 
-Notes:
+- Expected: `oracle_submit` rejects `linked-outside/secret.txt` with an error stating that the archive input must resolve inside the project cwd without symlink escapes.
+- Expected: no `oracle-*` job directory is created under `$TEST2_JOBS` for the rejected submission.
+- Why the fixture writes `.oracle-seed-generation`: `TEST2_AGENT` needs the same timestamped marker-only seed profile so submission reaches archive input validation.
 
-- this smoke test does not require `/oracle-auth`
-- the snippet creates an isolated test auth seed profile plus a non-empty `.oracle-seed-generation` marker for `TEST1_AGENT` because `oracle_submit` rejects missing or unverified seed profiles before archiving; an empty marker (`touch`) counts as unverified and is rejected at submit time
-- with that marker-only seed profile, the worker still fails later due to missing real auth, which is useful because the archive remains on disk for inspection
+### Testing local `/oracle` command-prompt changes
 
-#### Test 2: symlink escape rejection
-
-Expected behavior:
-
-- `oracle_submit` rejects `linked-outside/secret.txt`
-- the snippet creates the same marker-only isolated auth seed profile for `TEST2_AGENT` so the test reaches archive input validation
-- the error should say the archive input must resolve inside the project cwd without symlink escapes
-- no oracle job directory should be created for the rejected submit
-
-### Testing local `/oracle` command-prompt changes too
-
-The main smoke test above calls `oracle_submit` directly, so it only needs the local extension entrypoint. If you also changed `prompts/oracle.md`, start the isolated session with the same local extension entrypoint; the extension reads the in-repo prompt file as hidden command-dispatch instructions:
+The repeatable script above calls `oracle_submit` directly. If you changed `prompts/oracle.md` or `prompts/oracle-followup.md`, start the isolated session with the same local extension entrypoint so the extension reads the in-repo prompt file as hidden command-dispatch instructions without depending on `.pi/settings.json` package entries:
 
 ```bash
 LOCAL_ORACLE_PI_CMD="pi --approve --session-dir '$TEST1_SESSIONS' --no-extensions -e '$REPO/extensions/oracle/index.ts'"
 TMUX_CMD1="cd '$REPO' && env PI_CODING_AGENT_DIR='$TEST1_AGENT' PI_ORACLE_JOBS_DIR='$TEST1_JOBS' PATH='$PATH' $LOCAL_ORACLE_PI_CMD"
 ```
 
-Use the same pattern for additional sessions, swapping the session/job directories as needed. This keeps the test on the in-repo extension and hidden in-repo command prompt without depending on `.pi/settings.json` package entries.
+`/oracle` starts by calling `oracle_preflight`. To proceed past that early guard in an isolated test without touching your normal auth state, run `/oracle-auth` inside the isolated agent directory or create a purpose-built seed fixture with a non-empty `.oracle-seed-generation` marker.
 
-`/oracle` now starts by calling `oracle_preflight`. If you want the command flow to proceed past that early guard in an isolated test without using your normal auth state, run `/oracle-auth` in the isolated agent dir or create a purpose-built verified seed fixture with `.oracle-seed-generation`.
+### Cleanup and minimum pre-commit evidence
 
-### Additional failure-mode smoke tests
+The script kills the temporary `tmux` sessions on exit. After inspecting the output, remove the temporary directory:
 
-#### `/oracle-auth` should fail fast when `agent-browser` hangs
+```bash
+rm -rf "$TEST_ROOT"
+```
 
-Use this when validating timeout hardening around auth/bootstrap browser commands.
+Before committing code changes, keep evidence for:
+
+- `npm run verify:oracle` (`npm test`) passing;
+- isolated `pi` session validation using this workflow;
+- any agent feedback gathered during the isolated run if it exposed clunky or unclear behavior.
+
+## Focused failure-mode and managed-browser checks
+
+### `/oracle-auth` timeout when `agent-browser` hangs
+
+Use this check when modifying timeout or process-cleanup handling around auth and bootstrap browser commands. The script below configures a missing cookie file and a fake `agent-browser` binary that sleeps forever, then verifies that `/oracle-auth` aborts within the configured timeout instead of hanging the session:
 
 ```bash
 set -euo pipefail
@@ -288,33 +253,16 @@ sleep 12
 tmux capture-pane -p -S -220 -t "$SESSION_NAME":0.0 | tail -n 140
 ```
 
-Expected behavior:
+Expected observations:
 
-- the isolated `pi` session loads the local extension successfully
-- `/oracle-auth` returns with an error instead of hanging indefinitely
-- the output should mention the missing ChatGPT session-token cookies or the configured cookie source problem
-- the session should remain usable after the command failure
-
-### Switching to `thinking_light`
-
-To run the same smoke test with `thinking_light`, change both prompts from:
-
-```text
-preset "instant"
-```
-
-to:
-
-```text
-preset "thinking_light"
-```
+- the isolated `pi` session loads the local extension;
+- `/oracle-auth` returns an error instead of hanging indefinitely;
+- the output mentions the missing ChatGPT session-token cookies or the configured cookie source problem;
+- the session remains usable after the command failure.
 
 ### Managed browser mode
 
-Changes that touch `browser.chatGptManagedProfileDir` (attach, keeper, sign-in, readiness) also get
-one run in that mode, through the Oh My Pi print-mode route above. The session gets its own state
-directory, which holds the keeper log and the profile lock, and a 15-second idle grace so the
-keeper's quit shows up while you watch:
+Changes that touch `browser.chatGptManagedProfileDir` (launch, attach, keeper, sign-in, or readiness) require a run in managed-browser mode through the Oh My Pi print-mode route. The command below gives the session an isolated state directory (holding the keeper log and profile lock) and a 15-second idle grace (`PI_ORACLE_MANAGED_BROWSER_IDLE_MS=15000`) to validate launch, attach, per-command browser-identity checks, and the idle keeper quit without spending a ChatGPT response:
 
 ```bash
 set -euo pipefail
@@ -335,15 +283,9 @@ env PI_CODING_AGENT_DIR="$AGENT" PI_ORACLE_JOBS_DIR="$TEST_ROOT/jobs" PI_ORACLE_
   --model <model id> --thinking low --no-extensions -e "$REPO/extensions/oracle/index.ts" "$PROMPT" < /dev/null
 ```
 
-The empty profile is not signed in, so this run covers launch, attach, the per-command
-browser-identity checks, and the keeper without spending a ChatGPT response: the job fails at
-`verifying_auth` and asks you to rerun `/oracle-auth`. Running `oracle_auth` the same way opens a
-ChatGPT sign-in tab and says a person must sign in; close that tab afterwards, or the keeper keeps
-Chrome open for it.
+Expected observations for the unsigned profile: the empty profile is not signed in, so the job is expected to fail at `verifying_auth` and ask you to rerun `/oracle-auth`. Running `oracle_auth` the same way opens a ChatGPT sign-in tab and reports that a person must sign in; close that tab afterwards, or the keeper keeps Chrome open for it.
 
-For a signed-in run, never point the session at a profile whose Chrome is serving live jobs, such
-as the Chrome behind your relay endpoint. Clone that profile into `$PROFILE` before running the
-session instead:
+For a signed-in run, never point the test session at a profile whose Chrome is serving live jobs, such as the Chrome behind your relay endpoint. Clone that profile into `$PROFILE`, remove its singleton lock files, and mark it cleanly exited before running the session:
 
 ```bash
 SIGNED_IN_PROFILE="<signed-in Chrome user-data directory>"
@@ -355,65 +297,32 @@ rm -f "$PROFILE"/Singleton{Lock,Socket,Cookie} "$PROFILE/DevToolsActivePort"
 node -e 'const fs = require("fs"), f = process.argv[1], p = JSON.parse(fs.readFileSync(f, "utf8")); p.profile = { ...p.profile, exit_type: "Normal", exited_cleanly: true }; fs.writeFileSync(f, JSON.stringify(p));' "$PROFILE/Default/Preferences"
 ```
 
-The clone's cookies stay encrypted with this Mac's Chrome Safe Storage key, so it signs in only
-with the same Chrome on the same machine, and `--disable-sync` in the config keeps it from syncing
-as the live profile's Chrome client. Delete `$TEST_ROOT` afterwards: the clone holds session
-cookies.
+The clone's cookies remain encrypted with this Mac's Chrome Safe Storage key, so it signs in only with the same Chrome on the same machine, and `--disable-sync` in the config keeps it from syncing as the live profile's Chrome client. Delete `$TEST_ROOT` afterwards because the clone holds session cookies.
 
-Expected results:
+Expected observations for the signed-in profile:
 
-- the worker log shows `Opened the managed ChatGPT browser at http://127.0.0.1:<port>` (`Reusing …`
-  when a Chrome started with `--remote-debugging-port=0` already serves the profile), and
-  `job.json` records that endpoint under `managedBrowser`
-- the signed-in job completes with the requested reply and no cleanup warnings
-- `$TEST_ROOT/state/managed-browser.log` shows `started Chrome`, then, about 15 seconds after the
-  last job and page are gone, `quit Chrome … with no job and no page` and `exited (exit code 0)`
-- `agent-browser session list` no longer lists the job's `runtimeSessionName`
-
-### Cleanup
-
-The snippet already kills the temporary `tmux` sessions on exit.
-
-To remove the temporary files after inspection:
-
-```bash
-rm -rf "$TEST_ROOT"
-```
-
-### Minimum pre-commit evidence
-
-Before committing code changes, keep evidence for:
-
-- `npm test` passing
-- isolated `pi` session validation using this workflow
-- any agent feedback gathered during the isolated run if it exposed clunky or unclear behavior
+- the worker log shows `Opened the managed ChatGPT browser at http://127.0.0.1:<port>` (`Reusing …` when a Chrome started with `--remote-debugging-port=0` already serves the profile), and `job.json` records that endpoint under `managedBrowser`;
+- the signed-in job completes with `MANAGED OK` and no cleanup warnings;
+- `$TEST_ROOT/state/managed-browser.log` shows `started Chrome`, then, about 15 seconds after the last job and page close, `quit Chrome … with no job and no page` and `exited (exit code 0)`;
+- `agent-browser session list` does not list the job's `runtimeSessionName` after teardown.
 
 ## Auth recovery drill
 
-This section codifies the safe validation drill for expired / missing auth in the isolated oracle seed profile.
+Use this maintainer drill to validate missing or unauthenticated seed detection and `/oracle-auth` recovery on the isolated seed profile transport. The drill proves four things:
 
-The goal is to prove:
-1. a broken seed profile fails cleanly
-2. the failure is classified as auth/login-required, not as generic UI drift
-3. `/oracle-auth` repairs the seed profile
-4. the next normal oracle job succeeds again
+1. an empty or unauthenticated seed profile is refused cleanly at submission before creating an archive or job;
+2. the blocker is reported as an auth seed readiness failure, not as generic UI drift;
+3. `/oracle-auth` repairs the seed profile without touching the real Chrome profile;
+4. the next oracle job completes normally.
 
-### Safety guarantees
+### Safety guarantees and preconditions
 
-This drill must **not** touch the user’s real Chrome profile.
-It only mutates the isolated oracle seed profile configured by `browser.authSeedProfileDir`.
+- **Safety:** This drill mutates only the isolated oracle seed profile configured by `browser.authSeedProfileDir`. Never point `SEED` at your real Chrome user-data directory.
+- **Preconditions:** No active oracle jobs; `pi` reloaded with the current extension code; `/oracle-auth` already known to work in the current environment.
 
-That directory must remain separate from the real Chrome user-data tree.
+### 1. Back up the current seed profile
 
-### Preconditions
-
-- No active oracle jobs
-- `pi` reloaded with the current extension code
-- `/oracle-auth` happy path already known to work in the current environment
-
-### Backup
-
-Create a backup of the current seed profile first:
+Copy the current isolated seed profile before mutating it so you can restore it if needed:
 
 ```bash
 SEED="<oracle-auth-seed-profile-dir>"
@@ -422,9 +331,9 @@ cp -cR "$SEED" "$BACKUP"
 echo "$BACKUP"
 ```
 
-### Expired/missing-auth simulation
+### 2. Simulate an unauthenticated seed profile
 
-Replace the seed profile with an empty isolated directory:
+Replace the seed directory with an empty isolated directory (no `.oracle-seed-generation` marker):
 
 ```bash
 SEED="<oracle-auth-seed-profile-dir>"
@@ -433,86 +342,49 @@ mkdir -p "$SEED"
 chmod 700 "$SEED"
 ```
 
-This simulates a seed profile with no usable provider session.
+### 3. Verify submission refusal
 
-### Validation steps
+1. Reload `pi` so the extension reads the current seed directory state.
+2. Run `oracle_preflight` or attempt a tiny oracle submission.
 
-#### 1. Reload `pi`
+Expected observations:
 
-Reload so the extension sees the current seed directory state.
+- `oracle_submit` refuses the submission before creating an archive or persisting a job directory with:
+  `Oracle auth seed profile exists but is not authenticated: <dir>. Run /oracle-auth to create a verified auth seed before submitting oracle jobs.`
+  (If `<dir>` was removed and not recreated, expected refusal is: `Oracle auth seed profile not found: <dir>. Run /oracle-auth first.`)
+- `oracle_preflight` reports the same auth seed blocker.
+- The refusal is not misclassified as a model configuration failure, artifact failure, generic timeout, or UI drift.
 
-#### 2. Run a tiny oracle job
+### 4. Repair with `/oracle-auth` and rerun
 
-Use a tiny prompt with a tiny archive.
-Expected result:
-- job fails quickly
-- failure is clearly auth/login related
-- failure is **not** misclassified as:
-  - model configuration failure
-  - artifact failure
-  - generic timeout
-  - vague UI drift
+1. Run `/oracle-auth`:
 
-#### 3. Repair with `/oracle-auth`
+   ```text
+   /oracle-auth
+   ```
 
-Run:
+   Expected: provider cookies are synced into the isolated seed profile, `.oracle-seed-generation` is written, no real Chrome profile is mutated, and the command reports success.
+2. Reload `pi` after auth repair.
+3. Submit the same tiny oracle job again.
+   Expected: the job completes, persists its response under `/tmp/oracle-<job-id>/response.md`, and triggers the session wake-up.
 
-```text
-/oracle-auth
-```
+### Pass criteria and evidence to capture
 
-Expected result:
-- provider cookies are re-synced into the seed profile
-- no real Chrome profile is mutated
-- command reports success
+The drill passes only when all of the following hold:
 
-#### 4. Reload `pi` again
+- the unauthenticated seed directory is refused at preflight and submission with the exact auth seed message above;
+- `/oracle-auth` repairs the seed profile cleanly without mutating the real Chrome profile;
+- the subsequent oracle job completes with no worker, session, or profile cleanup regressions.
 
-Reload after auth repair.
+Capture as evidence:
 
-#### 5. Run the same tiny oracle job again
+- **For the refusal step:** the exact `oracle_preflight` or `oracle_submit` refusal text (no `/tmp/oracle-<job-id>/` directory is created because submission is refused before archiving or job creation).
+- **For the repair step:** the per-run `/tmp/pi-oracle-auth-*/` diagnostics directory printed by `/oracle-auth` (`oracle-auth.log`, `oracle-auth.url.txt`, `oracle-auth.snapshot.txt`, `oracle-auth.body.txt`).
+- **For the completed rerun:** `/tmp/oracle-<job-id>/job.json`, `/tmp/oracle-<job-id>/response.md`, and `/tmp/oracle-<job-id>/logs/worker.log`.
 
-Expected result:
-- job succeeds normally
-- response persists under `/tmp/oracle-<job-id>/response.md`
-- wake-up triggers correctly
+### Maintainer note and failure handling
 
-### Pass criteria
+This is a maintainer validation procedure, not end-user setup documentation; it intentionally replaces the isolated oracle seed profile.
 
-The drill passes only if all of the following are true:
-
-- Broken seed profile fails as an auth/login-required problem
-- `/oracle-auth` repairs the seed profile cleanly
-- The next normal oracle run succeeds
-- No active worker/session/profile cleanup regressions appear
-- No interaction with the real Chrome profile is required beyond cookie sync during `/oracle-auth`
-
-### Evidence to capture
-
-For the failed run:
-- `/tmp/oracle-<job-id>/job.json`
-- `/tmp/oracle-<job-id>/logs/worker.log`
-- any failure diagnostics under that job dir
-
-For the repair:
-- the per-run `/tmp/pi-oracle-auth-*/` diagnostics directory printed by `/oracle-auth`
-- `oracle-auth.log`
-- `oracle-auth.url.txt`
-- `oracle-auth.snapshot.txt`
-- `oracle-auth.body.txt`
-
-For the successful rerun:
-- `/tmp/oracle-<job-id>/job.json`
-- `/tmp/oracle-<job-id>/response.md`
-- `/tmp/oracle-<job-id>/logs/worker.log`
-
-### Maintainer note
-
-This is a maintainer/operator validation document, not end-user setup documentation.
-It intentionally includes destructive steps against the isolated oracle seed profile only.
-
-### If the drill fails
-
-If the broken-seed run fails with anything other than a clean auth classification, fix that before treating recovery as production-ready.
-
-If `/oracle-auth` does not restore a working seed, treat auth recovery as still blocking.
+- If the unauthenticated seed step is not refused cleanly as an auth seed blocker, fix seed readiness before treating recovery as ready.
+- If `/oracle-auth` does not restore a working seed, restore `"$BACKUP"` into `"$SEED"` and treat auth recovery as blocking.

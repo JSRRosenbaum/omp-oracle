@@ -116,7 +116,11 @@ of the local gate.
 
 ## README header
 
-The theme-aware mark heads the centered header block, as in the gateway README:
+The centered `<div align="center">` header block opens the README in a fixed order, as in the
+gateway README: the 72px theme-aware mark, `# OMP Oracle`, the bold headline, the bold
+compatibility line, one short paragraph stating what the extension does, the navigation link row,
+the flat badges, and the `<sub><strong>Private by design:</strong> …</sub>` line, followed outside
+the centered block by the status blockquote:
 
 ```html
 <picture>

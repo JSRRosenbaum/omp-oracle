@@ -1,19 +1,28 @@
 # OMP Oracle compatibility
 
-What `omp-oracle` runs on, what it talks to, and where the claim stops. Observed means it was
-exercised and recorded; declared means package metadata allows it without a matching proof.
+Use this page to verify whether your host, operating system, runtime, browser, and provider
+transport are supported by `omp-oracle` (`0.4.3` on npm; the GitHub URL tracks `main`).
 
 Companion docs: [Operations](OPERATIONS.md) · [Release](RELEASE.md) · [Test plan](TEST_PLAN.md)
+
+## Reading this page
+
+| Status | Meaning |
+| --- | --- |
+| **Declared** | Package metadata allows it; not exercised by this fork |
+| **Validated upstream** | Exercised by upstream `pi-oracle` release gates |
+| **Observed** | Exercised by this fork and recorded in the [release ledger](RELEASE.md#evidence-ledger) |
+| **Required by the release gate** | The fork's release gate fails without it |
 
 ## Hosts
 
 | Host | Status | Evidence |
 | --- | --- | --- |
-| `pi` 0.80.9 | Validated baseline (upstream) | Upstream `pi-oracle` 0.7.19/0.7.20 release gates ran `npm run verify:oracle` and the Crabbox matrix against Pi 0.80.9; entries in the [release ledger](RELEASE.md#evidence-ledger) |
-| `pi` newer than 0.80.9 | Declared, not validated | Runtime packages are optional wildcard peers, so npm does not block newer releases |
-| `pi` older than 0.80.9 | Not blocked, outside the baseline | Not exercised by the current gate |
-| Oh My Pi 18.2.x | Observed running the fork (source-loaded) | The live eight-preset ChatGPT proof for every release since `0.3.1` runs through isolated OMP print-mode sessions that load this checkout's source (`omp --standard … --no-extensions -e`, see the [release runner](RELEASE.md#chatgpt-preset-proof)); Deep Research frame capture and native export were verified through the unmodified OMP 18.2.6 relay; `omp install --dry-run` resolves this checkout as `omp-oracle`. A job through the registry-installed package on OMP is recorded per release in the [ledger](RELEASE.md#fork-evidence-omp-oracle), not assumed |
-| Oh My Pi hosts without Pi's trust exports | Supported by design | `scripts/oracle-host-compat.test.mjs` links the config loader against a host API without `hasTrustRequiringProjectResources`/`ProjectTrustStore`; project overrides then require an explicit host trust decision |
+| `pi` 0.80.9 (baseline) | **Validated upstream**; **required by the release gate** | Upstream `pi-oracle` 0.7.19 and 0.7.20 release gates and the fork's Crabbox checks run against `pi` 0.80.9 (`devDependencies` `^0.80.9`); entries in the [release ledger](RELEASE.md#evidence-ledger) |
+| `pi` newer than 0.80.9 | **Declared** | `@earendil-works/pi-ai`, `@earendil-works/pi-coding-agent`, and `typebox` are optional wildcard peers, so npm does not block newer host releases |
+| `pi` older than 0.80.9 | **Declared** | Not blocked by package metadata and not exercised by the release gate |
+| Oh My Pi | **Observed**; **required by the release gate** | Exercised through source-loaded isolated Oh My Pi print-mode sessions (`omp --standard … --no-extensions -e`, see the [release runner](RELEASE.md#chatgpt-preset-proof)) for the eight-preset ChatGPT release proof, through a registry-installed package job recorded per release in the [release ledger](RELEASE.md#fork-evidence-omp-oracle) (recorded on Oh My Pi 18.2.6, 18.2.7, and 18.2.11), and with `omp install --dry-run` resolving this checkout as `omp-oracle` |
+| Oh My Pi hosts without Pi's trust exports | **Observed** (unit test) | Supported by design: `scripts/oracle-host-compat.test.mjs` links the config loader against a host API without `hasTrustRequiringProjectResources` or `ProjectTrustStore`; project overrides then require an explicit host trust decision |
 
 A persisted session is required on every host. `--no-session` runs report oracle unavailable.
 
@@ -21,86 +30,67 @@ A persisted session is required on every host. `--no-session` runs report oracle
 
 | Requirement | Value |
 | --- | --- |
-| Operating systems | macOS, Linux, Windows native (`package.json` `os`). The fork's Crabbox gate requires macOS and Ubuntu; Windows native is upstream-validated at `pi-oracle` 0.7.20 and not re-qualified by the fork, because the fork owns no Windows lane |
-| Node.js | 22.19.0 or newer to install and run (`engines`); the platform smoke and release validation expect Node 24+ (`platform-smoke.config.mjs`) |
+| Operating systems | macOS and Ubuntu Linux (**required by the release gate**); Windows native (**declared** in `package.json` `os`, **validated upstream** at `pi-oracle` 0.7.20, and not re-qualified by the fork because the fork has no Windows validation environment) |
+| Node.js | `>=22.19.0` to install and run (**declared** in `engines`); Node 24+ **required by the release gate** (`platform-smoke.config.mjs`) |
 | Browser | Google Chrome, Chromium, or another Chromium-family browser |
-| Local tools | `agent-browser` (0.35.0 or newer for relay mode) and `tar`; `zstd` for ChatGPT `.tar.zst` archives; `cp` on PATH or `PI_ORACLE_CP_PATH` for macOS APFS clone mode; Linux encrypted cookies may need `secret-tool` (GNOME) or `kwallet-query` + `dbus-send` (KDE) unless a safe-storage password override is set |
+| Local tools | `agent-browser` (0.35.0 or newer for relay mode) and `tar`; `zstd` for ChatGPT `.tar.zst` archives; `cp` on `PATH` or `PI_ORACLE_CP_PATH` for macOS APFS clone mode; Linux encrypted cookies may need `secret-tool` (GNOME) or `kwallet-query` + `dbus-send` (KDE) unless a safe-storage password override is set |
 | Profile copies | macOS uses APFS clones (`cp -cR`); Linux and Windows use Node's recursive copy |
 
 ## Providers
 
-The existing-Chrome endpoint also accepts native loopback Chrome CDP with a separate persistent
-user-data directory. Instant upload/response/owned-tab cleanup and cross-origin frame capture
-were exercised on macOS; a full Deep Research/export run on native CDP remains unverified.
-This is not the default isolated seed-clone transport; see [setup](OPERATIONS.md#dedicated-account-in-persistent-chrome).
-The managed browser runs the same native-CDP transport on a Chrome that Oracle opens and quits
-itself; see [managed browser](OPERATIONS.md#managed-chatgpt-browser-dedicated-account).
+| Provider | Selection | Archive format | Upload ceiling | Transports | Status |
+| --- | --- | --- | --- | --- | --- |
+| ChatGPT model presets | `preset`: `pro_standard`, `pro_extended`, `thinking_light`, `thinking_standard`, `thinking_extended`, `thinking_heavy`, `instant`, `instant_auto_switch` (`ORACLE_SUBMIT_PRESETS`; human-readable labels are normalized) | `.tar.zst` | 250 MiB | Isolated seed profile (default), [existing-Chrome relay](OPERATIONS.md#existing-chrome-relay-chatgpt-only), or [managed browser](OPERATIONS.md#managed-chatgpt-browser-dedicated-account) | **Required by the release gate** ([preset proof](RELEASE.md#chatgpt-preset-proof)) |
+| ChatGPT Deep Research | `preset: "deep_research"` (composer tool; model picker untouched) | `.tar.zst` | 250 MiB | Existing-Chrome relay or managed browser only; fails on the isolated seed profile with `errorCode: deep_research_report_unreadable` | **Observed** through the Oh My Pi relay and the managed browser ([release ledger](RELEASE.md#fork-evidence-omp-oracle)) |
+| Grok | `mode: "heavy"` only | `.tar.gz` | 200 MiB | Isolated seed profile | Not exercised by the fork's release gate; upstream manual upload testing is recorded below |
 
-| Provider | Selection | Archive format | Upload ceiling | Auth transports |
-| --- | --- | --- | --- | --- |
-| ChatGPT | `preset` (canonical ids in `ORACLE_SUBMIT_PRESETS`; human-readable labels are normalized) | `.tar.zst` | 250 MiB | Isolated seed profile, existing-Chrome relay, or managed browser |
-| Grok | `mode: "heavy"` only | `.tar.gz` | 200 MiB | Isolated seed profile |
-| ChatGPT Deep Research | `preset: "deep_research"` (composer tool; model picker untouched) | `.tar.zst` | 250 MiB | Existing-Chrome relay or managed browser only: the report is read from the research widget's iframe through CDP frame capture; on the isolated profile the job fails with `errorCode: deep_research_report_unreadable` |
+Upload ceilings apply after default exclusions and automatic whole-repo pruning. Grok uses
+`.tar.gz` because its execution environment can lack `zstd`; manual testing against
+`https://grok.com` accepted a 200 MiB upload and rejected 200 MiB + 1 byte.
 
-ChatGPT presets: `pro_standard`, `pro_extended`, `thinking_light`, `thinking_standard`,
-`thinking_extended`, `thinking_heavy`, `instant`, `instant_auto_switch`. Grok uses `.tar.gz`
-because its execution environment can lack `zstd`; manual testing against `https://grok.com`
-accepted a 200 MiB upload and rejected 200 MiB + 1 byte.
+The existing-Chrome relay option also accepts a
+[dedicated account in persistent Chrome](OPERATIONS.md#dedicated-account-in-persistent-chrome)
+over native loopback CDP with a separate user-data directory. Instant upload, response capture,
+owned-tab cleanup, and cross-origin frame capture are **observed** on macOS for that manual
+persistent-Chrome setup, and full Deep Research runs with native Markdown export are **observed**
+through the managed browser and the Oh My Pi relay; the manual persistent-Chrome setup is the
+only shared-Chrome route without a recorded Deep Research run. For response and Deep Research
+collection internals, see [Architecture](ARCHITECTURE.md#collection).
 
 ## Known limits
 
-Known limits are part of the claim; read them before installing.
+Known limits are part of the support boundary; read them before installing.
 
-- **ChatGPT's slider-based thinking-effort picker is driven by keyboard.** Since 2026-09-20 the
-  composer renders the tiers (Instant, Medium, High, Extra High, Pro) as a discrete slider that
-  exposes only the current stop; the worker focuses it, steps with arrow keys, and verifies each
-  step from the slider's own description. Both Pro presets land on the single `Pro` stop and
-  `thinking_light` shares `Medium` with `thinking_standard`; `Select model` is left on `Latest`.
-  The redesigned shell (from 2026-09-29) opens the same slider from the `Select ChatGPT model`
-  button. Older tier menus remain supported. The last stop a job sets stays selected afterwards;
-  the redesigned shell saves it to the account (`user_last_used_model_config`), so it becomes the
-  default in the account's other chats and browsers.
+- **ChatGPT's slider-based thinking-effort picker shares stops and saves to the account.** Both Pro presets (`pro_standard` and `pro_extended`) land on the single `Pro` stop, `thinking_light` shares `Medium` with `thinking_standard`, and `Select model` stays on `Latest` (older tier menus remain supported).
+  The last stop a job sets stays selected afterwards, and the redesigned ChatGPT shell saves it to
+  the account (`user_last_used_model_config`), making it the default in your other chats and browsers.
 - **Experimental public beta.** Provider UI, auth, model controls, and artifact download behavior
-  drift; release proof is re-run per release, not continuously.
-- **`pi-oracle` on npm is the upstream package**, not this fork; it must not stay installed
-  alongside `omp-oracle`, or `/oracle` commands and `oracle_*` tools register twice.
-- **Windows native is declared, not fork-qualified.** The fork owns no Parallels lane, so the
-  release gate requires macOS and Ubuntu only; Windows native support rests on upstream's
-  `pi-oracle` 0.7.20 validation until a Windows lane exists.
-- **Fork qualification covers what the release ledger names.** The relay transport and OMP host
-  compatibility are covered by unit and sanity tests, the live eight-preset ChatGPT proof through
-  the fork's build, and the macOS and Ubuntu Crabbox lanes recorded in the
-  [release ledger](RELEASE.md#fork-evidence-omp-oracle); nothing beyond those entries is claimed.
-- **A real ChatGPT or Grok web session is required** for the provider you use, in a local
-  Chromium-family browser profile.
-- **Relay mode needs a capable relay.** Relay builds without `Target.getTargets` cannot serve
-  `agent-browser`; relay mode is ChatGPT-only.
+  can drift between provider updates; release proof is re-run per release rather than continuously.
+- **`pi-oracle` on npm must not stay installed alongside `omp-oracle`.** `pi-oracle` is the
+  upstream package and does not carry this fork's changes; keeping both installed registers
+  `/oracle` commands and `oracle_*` tools twice.
+- **Windows native is declared, not fork-qualified.** The release gate requires macOS and Ubuntu
+  only because the fork has no Windows validation environment; Windows native support rests on
+  upstream `pi-oracle` 0.7.20 validation.
+- **Fork qualification covers only what the release ledger names.** Each release records the unit
+  and sanity checks, the live eight-preset ChatGPT proof through this source, and the macOS and
+  Ubuntu Crabbox checks in the [release ledger](RELEASE.md#fork-evidence-omp-oracle); nothing
+  beyond those entries is claimed.
+- **A real ChatGPT or Grok web session is required.** You must be signed in to the provider you
+  use in a local Chromium-family browser profile.
+- **Relay mode is ChatGPT-only and requires a capable relay.** Relay builds without
+  `Target.getTargets` cannot serve `agent-browser` (`0.35.0` or newer is required).
 - **The managed browser detects an open profile through Chrome's POSIX `SingletonLock`.** On
   Windows, a profile open without Oracle's DevTools endpoint surfaces only when a launch is handed
-  off to it. The window takes focus when Chrome creates it for the first job tab.
-- **Deep Research reports are read through CDP frame capture (verified 2026-09-20).** The report
-  renders inside a cross-origin, sandboxed ChatGPT App iframe (named `internal://deep-research`
-  inside the reply; in the redesigned shell named `Deep research`, in a block beside the reply
-  within the same exchange) whose same-origin child frame holds the text; the top
-  document keeps a model-written placeholder and the conversation API carries no report. The
-  worker arms `Target.setAutoAttach` on its pinned tab before sending — Chrome only surfaces
-  frames created after arming — and reads
-  `frames[0].document.body.innerText` from the attached session. Relay transport only; a
-  `deep_research` job on the isolated profile fails with `deep_research_report_unreadable`. Live
-  proof: one job completed with a 13.5K-character report in 5 minutes. Excluded from the release
-  preset proof because each run consumes a Deep Research task.
-- **Deep Research native Markdown exports are collected through Chrome's download events
-  (verified 2026-09-20 on Chrome 153 through the OMP relay).** The widget's Export → Export to
-  Markdown menu delegates the download to the host page, so hooks inside the frame never see the
-  bytes. The worker enables the `Page` domain on the pinned tab and the bound frame session,
-  listens for `Page.downloadWillBegin`/`Page.downloadProgress`, and reads the bytes from the
-  `Blob` it registered behind the UI's object URL. The extension relay does not route
-  `Browser.setDownloadBehavior` (`chrome.debugger` clients may not write local files), so the
-  worker never changes the browser's download destination and never learns the saved path: Chrome
-  keeps its own copy in its configured download directory, and the worker's copy is validated
-  against Chrome's declared byte count instead. Live proof: a completed job's export was
-  recollected byte-identical (36,995 bytes, same SHA-256) to the file Chrome saved.
-- **Wake-up is best effort.** Completion delivery into the host session is one attempt; the saved
-  job directory is the durable record.
-- **No demo media.** The README uses command-level proof and design docs; no screenshot or GIF is
-  checked in.
+  off to it, and the browser window takes focus when Chrome creates it for the first job tab.
+- **Other tools connected to a shared Chrome can navigate a job's tab.** If another browser tool
+  moves a running job's tab to a different page, the worker detects the change and reopens its own
+  conversation at the cost of time; inspect conversations in another tab while jobs run.
+- **Deep Research requires a shared Chrome transport and is excluded from the release preset proof.** `deep_research` runs only through the existing-Chrome relay or the managed browser (holding the job's tab for up to 90 minutes by default) and fails on the isolated seed profile with `deep_research_report_unreadable`.
+  Each run consumes a Deep Research task on the account, so `release:proof:chatgpt-presets`
+  excludes it (see [Architecture](ARCHITECTURE.md#collection)).
+- **Wake-up is best effort.** Completion delivery into the asking session is a single idle-gated
+  attempt; the saved job directory under `${PI_ORACLE_JOBS_DIR:-/tmp}/oracle-<job-id>/` is the
+  durable record.
+- **No demo media.** The documentation uses command-level proof and design docs; no screenshot or
+  GIF is checked in.

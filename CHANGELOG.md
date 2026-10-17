@@ -4,6 +4,14 @@ Versions from `0.1.0` are `omp-oracle` releases; the numbering restarts for the 
 identity and does not continue upstream `pi-oracle`'s `0.7.x` line. The inherited upstream
 history is kept below the divider.
 
+## Unreleased
+
+### Changed
+- the README and `docs/` are rewritten reader-first, one reader and one job per page. The README leads with the promise, when to use it, a four-step first run, everyday commands, how it works, configuration, presets, a privacy summary, and a support summary; the new `docs/README.md` indexes every document by task (use it, trust it, build on it, dated records). `docs/OPERATIONS.md` gains a transport chooser, a troubleshooting-by-symptom table, the complete configuration reference (moved from `docs/ARCHITECTURE.md`), and the install-source switching guide (moved from the README); `docs/ARCHITECTURE.md` keeps the design, job layout, and collection contracts and folds its rejected and superseded history into a short design lineage; `docs/COMPATIBILITY.md` opens with a status vocabulary (declared, validated upstream, observed, required by the release gate); `docs/TEST_PLAN.md` owns the validation ladder; `docs/RELEASE.md` separates producing the preset proof from checking it and frames the carried upstream records as history; `CONTRIBUTING.md` lists the evidence each change type needs and the repository layout. Claims are corrected from the code and the ledger: default archive exclusions apply when a directory is expanded, while an explicitly named path is archived as named (`.git` is excluded by default, not "never included"); the local gate runs three typecheck projects; release proof covers the eight model presets; the auth recovery drill expects an empty seed profile to be refused at submission; the `real-extension` suite runs `/oracle-status` through the installed package by default; Deep Research with native Markdown export is recorded through the managed browser. The release ledger entries are unchanged
+
+### Added
+- `npm run test:docs` (`scripts/docs-links.test.mjs`), part of `npm run verify:oracle`, fails when a relative documentation link, a heading fragment, or a link into this repository from the public site does not resolve
+
 ## 0.4.3 - 2026-10-06
 
 ### Fixed

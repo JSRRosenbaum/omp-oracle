@@ -1,86 +1,73 @@
 # OMP Oracle release
 
-How a change becomes a published `omp-oracle` release, and the evidence ledger behind the
-current state. The gate is local and Crabbox-driven; hosted CI runs only the cheap local gate.
-
-Companion docs: [Test plan](TEST_PLAN.md) · [Platform smoke](PLATFORM_SMOKE.md) ·
-[Architecture](ARCHITECTURE.md) · [Upstream](UPSTREAM.md) · [Changelog](../CHANGELOG.md)
+Run the local release gate, produce and verify the live ChatGPT preset proof, and record the evidence before publishing `omp-oracle` for Oh My Pi and `pi`.
+Companion docs: [Test plan](TEST_PLAN.md) · [Platform smoke](PLATFORM_SMOKE.md) · [Compatibility](COMPATIBILITY.md) · [Upstream](UPSTREAM.md) · [Changelog](../CHANGELOG.md)
 
 ## Package identity
 
-- npm name: `omp-oracle`. The `pi-oracle` package on npm is the upstream project published by
-  its maintainer; it does not carry this fork's commits.
-- Version: the fork's own line, starting at `0.1.0`. It does not inherit upstream's `0.7.x`
-  numbering; `0.1.0` was based on upstream `pi-oracle` 0.7.20, and later releases add the changes
-  listed per version in [`CHANGELOG.md`](../CHANGELOG.md).
-- The GitHub URL install tracks `main`; npm carries the released versions
-  ([README](../README.md#build-and-run)).
-- Runtime identifiers are unchanged by the rename: `/oracle*` commands, `oracle_*` tool names,
-  `PI_ORACLE_*` environment variables, `/tmp/pi-oracle-state`, the job directory format, and the
-  `omp.pi-oracle.programmatic.v1` bridge symbol.
+- npm name: `omp-oracle` (current release `0.4.3`, npm `latest`). The `pi-oracle` package on npm is the upstream project published by its maintainer; it does not carry this fork's commits.
+- Version: the fork's own line, starting at `0.1.0`. It does not inherit upstream's `0.7.x` numbering; `0.1.0` was based on upstream `pi-oracle` 0.7.20, and later releases add the changes listed per version in [`CHANGELOG.md`](../CHANGELOG.md).
+- The GitHub URL install tracks `main`; npm carries the released versions ([README](../README.md#build-and-run)).
+- Runtime identifiers are unchanged by the rename: `/oracle*` commands, `oracle_*` tool names, `PI_ORACLE_*` environment variables, `/tmp/pi-oracle-state`, the job directory format, and the `omp.pi-oracle.programmatic.v1` bridge symbol.
 
-## Validation workflow
-
-Use the narrowest workflow that proves the change:
-
-| Situation | Command(s) |
-| --- | --- |
-| Everyday local iteration | `npm run verify:oracle` |
-| Platform-focused syntax/invariant sanity | `npm run check:platform-smoke`, `npm run sanity:oracle:platform` |
-| Platform-sensitive runtime changes | `npm run smoke:platform:doctor`, then a focused `node scripts/platform-smoke.mjs run --target <target> --suite <suite>` |
-| Platform matrix proof | `npm run smoke:platform:all` |
-| ChatGPT preset release proof | `npm run release:proof:chatgpt-presets` |
-| Publish/release gate | `npm run release:check` |
-
-`npm test` runs `npm run verify:oracle`; it is not a separate gate. Platform-sensitive changes
-include archive behavior, process cleanup, runtime/browser profile handling, package metadata,
-Crabbox harness code, or anything that may differ across macOS, Linux, and Windows.
+For everyday validation and choosing which check to run during development, see the [Test plan](TEST_PLAN.md#which-check-to-run).
 
 ## Release gate
 
-`npm publish` is guarded by `prepublishOnly`, which runs `npm run release:check`:
+`npm publish` is guarded by `prepublishOnly`, which runs `npm run release:check` across three stages:
 
-1. `npm run verify:oracle` — syntax and bundle checks, helper unit tests, the site coherence test,
-   the three typecheck projects (extension, worker helpers, worker runtime), the isolated sanity
-   harness, and `npm pack --dry-run`.
-2. `npm run release:proof:chatgpt-presets` — fresh live ChatGPT preset proof for every canonical
-   preset through the loaded extension.
-3. `npm run smoke:platform:all` — doctor-first macOS and Ubuntu Crabbox suites (`platform-build`
-   and `real-extension`) using packed-install proof, not source-tree `pi -e` loading.
-   `windows-native` is an available target but not release-required; see
-   [Compatibility](COMPATIBILITY.md#platforms-and-runtime).
+1. `npm run verify:oracle` (`npm test` is an alias) — runs, in order: syntax and bundle checks
+   (`check:oracle-extension`), platform-smoke invariants (`check:platform-smoke`), helper unit tests
+   (`test:oracle-helpers`), the site coherence test (`test:site`), the documentation link check
+   (`test:docs`), the three typecheck projects (`typecheck`, `typecheck:worker-helpers`,
+   `typecheck:worker-runtime`), the isolated sanity harness (`sanity:oracle`, including pinned
+   documentation literals), and `npm pack --dry-run` (`pack:check`).
+2. `npm run release:proof:chatgpt-presets` — checks the fresh live ChatGPT preset proof for the
+   eight model presets through the loaded extension.
+3. `npm run smoke:platform:all` — runs `npm run smoke:platform:doctor` first, then the macOS and
+   Ubuntu Crabbox lanes (`platform-build` and `real-extension`) using packed-install proof rather
+   than source-tree `pi -e` loading. `windows-native` is an available target, not a
+   release-required lane; see [Compatibility](COMPATIBILITY.md#platforms-and-runtime).
 
-The order matches the release order: cheap harness checks, fresh live preset proof, doctor,
-full matrix, then artifact review.
+Hosted CI runs only the local gate (`npm run verify:oracle`). The live preset proof and Crabbox
+matrix run locally in the order above, followed by artifact review.
 
 ### ChatGPT preset proof
 
-Before a release, run live jobs through the loaded extension for every ChatGPT preset in
-`ORACLE_SUBMIT_PRESETS`. Each prompt must make the saved response contain the exact markers
-`PRESET <preset> OK` and `PACKAGE omp-oracle`. The runner submits one such job per canonical
-preset from isolated OMP print-mode sessions (isolated agent dir, sessions, jobs, and state under
-`/tmp/omp-oracle-proof`; the operator's ChatGPT transport; this checkout's extension source), waits for each to
-complete, writes `.artifacts/chatgpt-preset-proof/latest.json`, and runs the checker:
+Release proof covers the **eight model presets** in `ORACLE_SUBMIT_PRESETS` (`pro_standard`,
+`pro_extended`, `thinking_light`, `thinking_standard`, `thinking_extended`, `thinking_heavy`,
+`instant`, `instant_auto_switch`) through the loaded extension. `deep_research` is a composer-tool
+preset and is excluded because each run consumes a Deep Research task on the account; the checker
+prints the exclusion. Ordinary pre-commit smoke runs can use `instant` or `thinking_light`.
+
+**Produce the proof**
+
+Each job's prompt must make the saved response contain the exact markers `PRESET <preset> OK` and
+`PACKAGE omp-oracle`. Run `npm run release:proof:chatgpt-presets:run` to submit one marker job per
+preset from isolated OMP print-mode sessions (loading this checkout's extension source via
+`omp --standard … --no-extensions -e`), wait for each job to complete, write
+`.artifacts/chatgpt-preset-proof/latest.json`, and run the checker:
 
 ```bash
 PI_ORACLE_PROOF_MODEL=<omp model id> PI_ORACLE_PROOF_MODELS_YML=<models.yml for that model> \
   npm run release:proof:chatgpt-presets:run
 ```
 
-`PI_ORACLE_PROOF_MODEL` is the model the isolated session uses to call `oracle_submit` (a zero-cost
-local model is fine); its `models.yml` is copied into the isolated agent dir because that dir has no
-other configuration. The transport selects the signed-in Chrome, i.e. the ChatGPT account the
-eight live jobs consume, so it has no default: the runner takes `PI_ORACLE_PROOF_RELAY` when set and
-otherwise the operator's agent-scope config (`$PI_CODING_AGENT_DIR/extensions/oracle.json`, default
-`~/.omp/agent/extensions/oracle.json`), the same account the operator's real jobs use: its
-`browser.chatGptRelayEndpoint`, or its `browser.chatGptManagedProfileDir`, which the isolated
-sessions then open like any managed-browser job. It prints the resolved transport, its source, and
-the exact isolated config before the first submit, and refuses to run when the config names
-neither. A managed-profile proof keeps its own state directory, so its keeper does not see the
-operator's leases; run it while the operator's own jobs are idle, as with the relay. `--dry-run`
-resolves everything and prints the plan without submitting. Pass preset ids as arguments to rerun a
-subset; a partial rerun keeps the other presets' entries from the existing proof file. The manual
-equivalent starts from the checked, intentionally non-valid template:
+- `PI_ORACLE_PROOF_MODEL` (required): model id the isolated session uses to call `oracle_submit` (a zero-cost local model is fine).
+- `PI_ORACLE_PROOF_MODELS_YML` (required): `models.yml` copied into the isolated agent directory so `PI_ORACLE_PROOF_MODEL` resolves.
+- `PI_ORACLE_PROOF_RELAY` (optional): existing-Chrome relay endpoint. Because the signed-in Chrome
+  selects the ChatGPT account the eight live jobs consume, the transport has no default: when
+  `PI_ORACLE_PROOF_RELAY` is unset, the runner reads your agent-level config
+  (`$PI_CODING_AGENT_DIR/extensions/oracle.json`, default `~/.omp/agent/extensions/oracle.json`)
+  for `browser.chatGptRelayEndpoint` or `browser.chatGptManagedProfileDir`. It prints the resolved
+  transport, its source, and the isolated config before the first submit, and refuses to run if the
+  config sets neither or sets both.
+- `PI_ORACLE_PROOF_ROOT` (optional, default `/tmp/omp-oracle-proof`): isolated root for `agent`, `sessions`, `jobs`, and `state`. A managed-profile proof uses its own state directory, so its keeper does not see your normal leases; run it while your own jobs are idle, as with the relay.
+- `PI_ORACLE_PROOF_CLI` (optional, default `omp`): OMP executable for the isolated sessions.
+- `--dry-run`: resolves the model, transport, and presets, prints the plan, and exits without submitting (`npm run release:proof:chatgpt-presets:run -- --dry-run`).
+- Subset reruns: pass preset ids as arguments (`npm run release:proof:chatgpt-presets:run -- instant thinking_light`) to rerun only those presets; a partial rerun keeps the remaining presets' entries from the existing proof file.
+
+To assemble a proof manually instead of using the runner, start from the checked, intentionally non-valid template:
 
 ```bash
 mkdir -p .artifacts/chatgpt-preset-proof
@@ -88,30 +75,39 @@ node scripts/oracle-chatgpt-preset-proof.mjs template > .artifacts/chatgpt-prese
 npm run release:proof:chatgpt-presets
 ```
 
-The checker fails if the proof is missing, stale, tied to a different package name, version, or
-git head, references jobs that completed before the current commit, or lacks actual persisted
-ChatGPT `.tar.zst` job state and response text for any canonical preset.
+**Check the proof**
 
-Ordinary pre-commit smoke runs can use `instant` or `thinking_light`; release proof must cover
-every canonical model preset (the eight non-tool presets) through the loaded extension.
-`deep_research` is a composer-tool preset and is excluded because each run consumes a Deep
-Research task; the checker prints the exclusion.
+`npm run release:proof:chatgpt-presets` reads `.artifacts/chatgpt-preset-proof/latest.json`
+(override with `PI_ORACLE_CHATGPT_PRESET_PROOF`; job lookup checks `PI_ORACLE_JOBS_DIR` and `/tmp`;
+freshness window defaults to 72 hours via `PI_ORACLE_CHATGPT_PRESET_PROOF_MAX_AGE_HOURS`). It
+rejects the proof if:
+
+- the working tree has uncommitted changes, or the proof file is missing or unreadable;
+- `schemaVersion` is not `1`, `provider` is not `"chatgpt"`, `extensionUnderTest` is not `"loaded-extension"`, or `packageName`, `packageVersion`, or `gitHead` does not match `package.json` and `HEAD`;
+- `validatedAt` or any job's `completedAt` is not a valid ISO timestamp, is in the future, is older than the freshness window (default 72 hours), or is not newer than the current `HEAD` commit time;
+- any of the eight model presets is missing, has a placeholder UUID, or lacks actual persisted
+  `job.json`, `response.md`, and `logs/worker.log` files on disk with `status: "complete"`,
+  `phase: "complete"`, a `.tar.zst` archive and SHA-256, a `https://chatgpt.com/c/...` conversation
+  URL, matching `extensionProvenance` (`packageName`, `packageVersion`, `gitHead`, `sourcePath`),
+  model configuration in the worker log, and both `PRESET <preset> OK` and `PACKAGE omp-oracle` in
+  the saved response.
 
 ### Real runtime suite defaults
 
-The real runtime suite defaults to deterministic installed-tool execution so platform proof
-stays bounded. Provider/model defaults remain `zai/glm-5.2` for doctor/config and optional
-model-agent debugging; override with `PI_ORACLE_REAL_TEST_PROVIDER` and
-`PI_ORACLE_REAL_TEST_MODEL`. For inner-loop source loading only, use `npm run smoke:real:source`;
-it is not release proof. Set `PI_ORACLE_REAL_TEST_MODEL_AGENT=1` only when debugging the slower
-model-agent path. The optional second real-agent negative symlink check is opt-in via
-`PI_ORACLE_REAL_TEST_NEGATIVE_SYMLINK=1`; `npm run sanity:oracle` covers archive/symlink rejection
-by default.
+The real runtime suite (`scripts/oracle-real-smoke.mjs`) defaults to deterministic installed-tool execution (`--mode packed`) so platform proof stays bounded:
+
+- Provider and model defaults are `zai/glm-5.2` for doctor/config and optional model-agent debugging; override with `PI_ORACLE_REAL_TEST_PROVIDER` and `PI_ORACLE_REAL_TEST_MODEL` (per-agent timeout `PI_ORACLE_REAL_TEST_TIMEOUT_MS`, default `180000` ms; artifact root `PI_ORACLE_REAL_TEST_ARTIFACT_ROOT`, default `.artifacts/real-smoke`; set `PI_ORACLE_REAL_TEST_KEEP_TMP=1` to keep the temporary fixture directory).
+- For inner-loop source loading only, use `npm run smoke:real:source`; it is not release proof.
+- Set `PI_ORACLE_REAL_TEST_MODEL_AGENT=1` only when debugging the slower model-agent path.
+- Set `PI_ORACLE_REAL_TEST_NEGATIVE_SYMLINK=1` to run the optional second real-agent negative symlink check; `npm run sanity:oracle` covers archive and symlink rejection by default.
 
 ## Evidence ledger
 
-Fork entries come first; entries carried from the upstream `pi-oracle` design document follow
-under their own heading and were recorded against the upstream package identity.
+Fork entries appear first, newest first, and each entry records what was observed for that release.
+The carried upstream records below them keep their original headings (such as "Current
+implementation status" and "Current readiness summary") and describe upstream `pi-oracle` at the
+time they were written, not this fork; current support claims live in
+[`COMPATIBILITY.md`](COMPATIBILITY.md).
 
 ### Fork evidence (omp-oracle)
 
