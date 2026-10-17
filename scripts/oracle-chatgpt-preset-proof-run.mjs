@@ -125,7 +125,7 @@ async function main() {
     const prompt = `Call the oracle_submit tool exactly once with these exact parameters and do not change any of them: prompt = "Reply with exactly two lines and nothing else. Line 1: ${marker}. Line 2: PACKAGE omp-oracle", files = ["README.md"], preset = "${preset}". Do not use bash. After the tool returns, reply with only the job id.`;
     const startedAt = Date.now();
     const output = await runSession([
-      "--standard", "--cwd", REPO_ROOT, "-p", "--auto-approve", "--session-dir", join(ROOT, "sessions"),
+      "--cwd", REPO_ROOT, "-p", "--auto-approve", "--session-dir", join(ROOT, "sessions"),
       "--model", MODEL, "--thinking", "low", "--no-extensions", "-e", resolve(REPO_ROOT, "extensions/oracle/index.ts"), prompt,
     ], env);
     const created = [...jobDirs(jobsDir)].filter((name) => !seen.has(name));

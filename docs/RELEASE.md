@@ -45,7 +45,7 @@ prints the exclusion. Ordinary pre-commit smoke runs can use `instant` or `think
 Each job's prompt must make the saved response contain the exact markers `PRESET <preset> OK` and
 `PACKAGE omp-oracle`. Run `npm run release:proof:chatgpt-presets:run` to submit one marker job per
 preset from isolated OMP print-mode sessions (loading this checkout's extension source via
-`omp --standard … --no-extensions -e`), wait for each job to complete, write
+`omp … --no-extensions -e`), wait for each job to complete, write
 `.artifacts/chatgpt-preset-proof/latest.json`, and run the checker:
 
 ```bash

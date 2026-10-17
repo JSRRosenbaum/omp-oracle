@@ -11,7 +11,7 @@ Companion docs: [Architecture](ARCHITECTURE.md) Â· [Operations](OPERATIONS.md) Â
 | Native Pi status smoke | `node --test scripts/oracle-native.test.mjs` | The locally installed `pi` loads this package in an isolated persisted JSON-mode session and dispatches empty-project `/oracle-status`, producing one successful display-marked response without a fetch attempt or browser job. Included in `npm run test:oracle-helpers`; requires no provider credentials or dependency-baseline upgrade. Does not qualify TUI rendering, print-mode output, or non-empty job summaries. |
 | Collection proof | `npm run proof:capture` | Against an owned headless Chromium and a loopback fixture server, with no account or network: delayed composer hydration and restored-draft replacement for both the `#prompt-textarea` editor and the `Ask ChatGPT` textbox, exact code payload capture, message-identity binding across shifted indices, nested code blocks, the current shell's code blocks in live and reloaded renders and runnable editor blocks (fenced in the action bar's language, the label never prose, an editor block read whole from its document rather than its rendered rows), source pills and other links to other sites kept out of download candidates, generic artifact download, the sandboxed report frame's host-delegated native Markdown export through pre-armed download events (bytes identical to the file Chrome saved), the report container excluded from download candidates, report chrome, citation pills, and diagrams rendered as declared gaps, widget-state Markdown and references resolved into footnotes, a completion wait whose tab another client moved to a finished foreign conversation (no completion until the job's own turn finishes, one `navigation` event), a failed capture that writes no response and marks `recollectionNeeded`, anchored recollection through the archive turn and its refusals, a control wait without animation frames, prompt send states (`not_sent`, `attempted`, `accepted`), idempotent recollection that preserves earlier bytes, recollection admission timestamps, and driver teardown serialization. |
 | Platform-focused syntax and invariant sanity | `npm run check:platform-smoke`, `npm run sanity:oracle:platform`, or `npm run verify:oracle:platform` | Crabbox harness invariants, real-smoke script syntax, platform-sensitive sanity assertions, and `npm pack --dry-run` pass before launching containers or VMs. |
-| Runtime or extension code change | [Isolated `pi` session smoke](#isolated-pi-session-smoke) | The local extension loads in an isolated `pi` or `omp --standard` session; whole-repo archives exclude local tool state by default; symlink escapes are rejected; exercised agents give candid friction feedback. `npm run smoke:real:source` only checks inner-loop source loading and is not a substitute. |
+| Runtime or extension code change | [Isolated `pi` session smoke](#isolated-pi-session-smoke) | The local extension loads in an isolated `pi` or `omp` print-mode session; whole-repo archives exclude local tool state by default; symlink escapes are rejected; exercised agents give candid friction feedback. `npm run smoke:real:source` only checks inner-loop source loading and is not a substitute. |
 | Managed-browser change | [Managed browser mode](#managed-browser-mode) | `browser.chatGptManagedProfileDir` launch, attach, per-command browser-identity checks, and the idle keeper quit succeed in an isolated state directory. |
 | Auth seed or bootstrap change | [Auth recovery drill](#auth-recovery-drill) and [Auth timeout check](#oracle-auth-timeout-when-agent-browser-hangs) | An unauthenticated or missing seed directory is refused at submission before creating an archive or job, `/oracle-auth` repairs the seed and fails fast when `agent-browser` hangs, and the next job completes. |
 | Platform-sensitive change | `npm run smoke:platform:doctor`, then `node scripts/platform-smoke.mjs run --target <target> --suite <suite>` ([Platform smoke](PLATFORM_SMOKE.md)) | Target setup is ready and the affected target (`macos`, `ubuntu`, or optional `windows-native`) and suite (`platform-build` or `real-extension`) pass when changes touch archive packing, process cleanup, runtime or browser profile handling, package metadata, or the Crabbox harness. |
@@ -24,7 +24,7 @@ Companion docs: [Architecture](ARCHITECTURE.md) Â· [Operations](OPERATIONS.md) Â
 
 Use this repeatable pre-commit workflow for code changes when you need end-to-end evidence beyond `npm test`. It validates that:
 
-- isolated `pi` or `omp --standard` sessions load the local extension source directly;
+- isolated `pi` or `omp` print-mode sessions load the local extension source directly;
 - whole-repo `oracle_submit` archive creation excludes local tool state by default;
 - targeted archive inputs cannot escape the repository through symlinked paths;
 - the exercised agents return candid feedback about tool clarity or clunkiness.
@@ -41,11 +41,11 @@ pi --approve --no-extensions -e "$REPO/extensions/oracle/index.ts"
 
 `--approve` is intentional for this isolated workflow on `pi` 0.79+: the test fixture is this trusted checkout, and scripted validation must not block on the project-trust prompt.
 
-On Oh My Pi the default launcher owns extension arguments and refuses `-e`. Use the standard launcher in print mode to validate the in-repo extension non-interactively:
+On Oh My Pi, run print mode with `--no-extensions -e` to validate the in-repo extension non-interactively:
 
 ```bash
 env PI_CODING_AGENT_DIR="$TEST1_AGENT" PI_ORACLE_JOBS_DIR="$TEST1_JOBS" PI_TELEMETRY=0 \
-  omp --standard --cwd "$REPO" -p --auto-approve --session-dir "$TEST1_SESSIONS" \
+  omp --cwd "$REPO" -p --auto-approve --session-dir "$TEST1_SESSIONS" \
   --model <model id> --thinking low --no-extensions -e "$REPO/extensions/oracle/index.ts" "$PROMPT1" < /dev/null
 ```
 
@@ -279,7 +279,7 @@ printf '{"browser":{"chatGptManagedProfileDir":"%s","args":["--disable-sync"]}}\
 PROMPT='Call oracle_preflight once for ChatGPT, then oracle_submit exactly once with prompt "Reply with exactly: MANAGED OK", files ["README.md"], preset "instant". Do not use bash. Report both results and one sentence of candid feedback on anything unclear or clunky.'
 env PI_CODING_AGENT_DIR="$AGENT" PI_ORACLE_JOBS_DIR="$TEST_ROOT/jobs" PI_ORACLE_STATE_DIR="$TEST_ROOT/state" \
   PI_ORACLE_MANAGED_BROWSER_IDLE_MS=15000 PI_TELEMETRY=0 \
-  omp --standard --cwd "$REPO" -p --auto-approve --session-dir "$TEST_ROOT/sessions" \
+  omp --cwd "$REPO" -p --auto-approve --session-dir "$TEST_ROOT/sessions" \
   --model <model id> --thinking low --no-extensions -e "$REPO/extensions/oracle/index.ts" "$PROMPT" < /dev/null
 ```
 
