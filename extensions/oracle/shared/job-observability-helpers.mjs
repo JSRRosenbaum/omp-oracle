@@ -222,7 +222,8 @@ export function formatOracleJobSummary(job, options = {}) {
     terminalEvent ? `terminal-event: ${terminalEvent}` : undefined,
     latestEvent && !sameEvent ? `${latestEventLabel}: ${latestEvent}` : undefined,
     job.error ? `error: ${formatOracleError(job.error)}` : undefined,
-    options.responsePreview ? "\nresponse-preview:" : undefined,
+    options.responsePreview ? `\nresponse-preview${(options.responseLength ?? 0) > options.responsePreview.length
+      ? ` (first ${options.responsePreview.length} of ${options.responseLength} characters; the response file holds the rest)` : ""}:` : undefined,
     options.responsePreview,
   ]
     .filter(Boolean)

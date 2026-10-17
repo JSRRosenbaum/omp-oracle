@@ -53,6 +53,8 @@ export interface OracleJobSummaryOptions {
   queuePosition?: OracleQueuePositionLike;
   artifactsPath?: string;
   responsePreview?: string;
+  /** Length of the whole saved response; a longer response than its preview is labeled truncated. */
+  responseLength?: number;
   responseAvailable?: boolean;
   includeLatestEvent?: boolean;
   includeWorkerLogPath?: boolean;

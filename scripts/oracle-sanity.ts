@@ -5370,6 +5370,8 @@ function testSharedObservabilityHelpers(): void {
   assert(summary.includes("queue-position: 2 of 3 global") && summary.includes("last-event:"), "shared observability helpers should include queue position and latest lifecycle breadcrumbs in non-terminal job summaries");
   assert(summary.includes("worker-log: /tmp/worker.log") && summary.includes("response: /tmp/response.md"), "shared observability helpers should include worker log paths and visible response paths");
   assert(summary.endsWith("\n\nresponse-preview:\nPreview body"), "the response preview is the payload of a completed job and must be labeled, not appended bare after the bookkeeping");
+  const truncatedSummary = formatOracleJobSummary(job, { responsePreview: "Preview body", responseLength: 9000, responseAvailable: true });
+  assert(truncatedSummary.endsWith("\n\nresponse-preview (first 12 of 9000 characters; the response file holds the rest):\nPreview body"), "a preview shorter than the saved response must say it is partial");
 
   const freshHeartbeatSummary = formatOracleJobSummary(transitionOracleJobPhase(job, "awaiting_response", {
     at: "2026-01-01T00:00:05.000Z",

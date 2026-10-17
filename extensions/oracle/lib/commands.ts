@@ -34,9 +34,12 @@ async function summarizeJob(jobId: string, options?: { responsePreview?: boolean
 
   const responseAvailable = Boolean(job.responsePath && existsSync(job.responsePath));
   let responsePreview: string | undefined;
+  let responseLength: number | undefined;
   if (options?.responsePreview && responseAvailable && job.responsePath) {
     try {
-      responsePreview = (await readFile(job.responsePath, "utf8")).slice(0, 4000);
+      const response = await readFile(job.responsePath, "utf8");
+      responsePreview = response.slice(0, 4000);
+      responseLength = response.length;
     } catch {
       responsePreview = undefined;
     }
@@ -47,6 +50,7 @@ async function summarizeJob(jobId: string, options?: { responsePreview?: boolean
     artifactsPath: `${getJobDir(job.id)}/artifacts`,
     responseAvailable,
     responsePreview,
+    responseLength,
     heartbeatStaleMs: ORACLE_STALE_HEARTBEAT_MS,
   });
 }

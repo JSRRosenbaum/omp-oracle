@@ -1276,10 +1276,12 @@ export function registerOracleTools(pi: ExtensionAPI, workerPath: string, authWo
         const current = latest ?? readJob(job.id) ?? job;
 
         let responsePreview: string | undefined;
+        let responseLength: number | undefined;
         let responseAvailable = false;
         try {
           const response = await readFile(current.responsePath || "", "utf8");
           responsePreview = response.slice(0, 4000);
+          responseLength = response.length;
           responseAvailable = true;
         } catch {
           responsePreview = undefined;
@@ -1294,6 +1296,7 @@ export function registerOracleTools(pi: ExtensionAPI, workerPath: string, authWo
                 queuePosition,
                 artifactsPath: `${getJobDir(current.id)}/artifacts`,
                 responsePreview,
+                responseLength,
                 responseAvailable,
                 heartbeatStaleMs: ORACLE_STALE_HEARTBEAT_MS,
               }),
