@@ -28,9 +28,21 @@ export function normalizeLoginProbeResult(result) {
     bodyKeys: Array.isArray(value.bodyKeys) ? value.bodyKeys.filter((entry) => typeof entry === "string") : [],
     bodyHasId: value.bodyHasId === true,
     bodyHasEmail: value.bodyHasEmail === true,
+    bodyIsAnonymous: value.bodyIsAnonymous === true,
     name: typeof value.name === "string" ? value.name : undefined,
     responsePreview: typeof value.responsePreview === "string" ? value.responsePreview : undefined,
   };
+}
+
+/**
+ * CDP evaluations can be interrupted by normal redirects. Do not retry arbitrary
+ * protocol failures or explicitly closed/disconnected browser errors.
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export function isAuthNavigationError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Inspected target navigated or closed|Execution context was destroyed|Cannot find context with specified id/i.test(message);
 }
 
 /**
@@ -101,7 +113,18 @@ export function classifyChatAuthPage(args) {
     return { state: "transient_outage_error", message: `ChatGPT is showing a transient outage/error page. Logs: ${args.logPath}` };
   }
 
-  const probeHasAccountIdentity = args.probe?.bodyHasId === true || args.probe?.bodyHasEmail === true;
+  // /backend-api/me also returns HTTP 200 and an id for anonymous visitors.
+  // Those ua-* identities must not drive account selection or auth reloads.
+  if (args.probe?.bodyIsAnonymous && (args.probe?.onAuthPage || args.probe?.domLoginCta)) {
+    return {
+      state: "login_required",
+      message:
+        `Synced cookies from ${args.cookieSourceLabel}, but ChatGPT returned an anonymous visitor session, not a signed-in account. ` +
+        `Sign in to ChatGPT in the source browser profile, quit that browser, then rerun /oracle-auth. Logs: ${args.logPath}`,
+    };
+  }
+
+  const probeHasAccountIdentity = !args.probe?.bodyIsAnonymous && (args.probe?.bodyHasId === true || args.probe?.bodyHasEmail === true);
 
   // Cloudflare can make /backend-api/me return 403 before its challenge body or
   // the authenticated composer becomes observable. Only 401 is conclusive here;

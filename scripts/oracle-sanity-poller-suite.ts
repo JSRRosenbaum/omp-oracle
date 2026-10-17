@@ -11,7 +11,7 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { SessionManager, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { OracleConfig } from "../extensions/oracle/lib/config.ts";
+import { loadOracleConfig, type OracleConfig } from "../extensions/oracle/lib/config.ts";
 import {
   cancelOracleJob,
   getJobDir,
@@ -456,7 +456,7 @@ async function testPollerSkipsContendedAdmissionPromotion(config: OracleConfig):
   await cleanupJob(jobId);
 }
 
-async function testOracleExtensionSkipsNoSessionWakeupRouting(config: OracleConfig): Promise<void> {
+async function testOracleExtensionHandlesNoSessionStartup(config: OracleConfig): Promise<void> {
   await resetOracleStateDir();
   const sessionManager = createPersistedSessionManager("poller-no-session-submit");
   const sessionFile = sessionManager.getSessionFile();
@@ -478,15 +478,28 @@ async function testOracleExtensionSkipsNoSessionWakeupRouting(config: OracleConf
   assert(sessionStart, "oracle extension should register a session_start handler");
 
   const ui = createUiStub();
-  await sessionStart!({}, createExtensionCtx({ getSessionFile: () => undefined } as ExtensionContext["sessionManager"], ui));
-  await waitForCondition(() => (ui.statuses.some((entry) => entry.value.includes("oracle: unavailable")) ? true : undefined), {
-    timeoutMs: 1_000,
-    description: "oracle unavailable status",
-  });
+  const agentDir = await mkdtemp(join(tmpdir(), "oracle-no-session-agent-"));
+  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
+  try {
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+    loadOracleConfig(process.cwd());
+    await sessionStart!({}, createExtensionCtx({ getSessionFile: () => undefined } as ExtensionContext["sessionManager"], ui));
+    await waitForCondition(() => (ui.statuses.some((entry) => entry.value.includes("oracle: unavailable")) ? true : undefined), {
+      timeoutMs: 1_000,
+      description: "oracle unavailable status",
+    });
 
-  assert(sent.length === 0, `oracle extension should not start wake-up routing for no-session contexts, saw ${sent.length}`);
-  assert(ui.statuses.some((entry) => entry.value.includes("oracle: unavailable")), "oracle extension should mark oracle unavailable when the current session has no persisted identity");
-  await cleanupJob(jobId);
+    await waitForAllPollersToQuiesce();
+    assert(ui.notifications.length === 0, "no-session startup should report unavailable without attempting initialization that produces warnings");
+    assert(sent.length === 0, `no-session startup should not send wake-up messages, saw ${sent.length}`);
+    assert(ui.statuses.some((entry) => entry.value.includes("oracle: unavailable")), "oracle extension should mark oracle unavailable when the current session has no persisted identity");
+  } finally {
+    await resetOracleStateDir();
+    if (originalAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = originalAgentDir;
+    await cleanupJob(jobId);
+    await rm(agentDir, { recursive: true, force: true });
+  }
 }
 
 async function testOracleExtensionSkipsPollerInOneShotModes(config: OracleConfig): Promise<void> {
@@ -1591,7 +1604,7 @@ export async function runPollerSanitySuite(config: OracleConfig): Promise<void> 
   await testPreSendStatusObservationDoesNotSuppressFirstWakeup(config);
   await testPollerNotification(config);
   await testPollerSkipsContendedAdmissionPromotion(config);
-  await testOracleExtensionSkipsNoSessionWakeupRouting(config);
+  await testOracleExtensionHandlesNoSessionStartup(config);
   await testOracleExtensionSkipsPollerInOneShotModes(config);
   await testOracleExtensionReadinessFollowsRelayEndpoint();
   await testPersistedSessionsDoNotAdoptLegacyProjectScopedJobs(config);

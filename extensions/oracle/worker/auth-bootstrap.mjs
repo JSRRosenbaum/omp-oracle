@@ -18,7 +18,7 @@ import { getCookiesFromConfiguredChromiumSource } from "./chromium-cookie-source
 import { parseSnapshotEntries } from "./artifact-heuristics.mjs";
 import { buildAllowedChatGptOrigins, CHATGPT_ADD_FILES_LABEL, isChatGptComposerEntry } from "./chatgpt-ui-helpers.mjs";
 import { stripUrlQueryAndHash } from "./chatgpt-flow-helpers.mjs";
-import { buildAccountChooserCandidateLabels, classifyChatAuthPage, normalizeLoginProbeResult } from "./auth-flow-helpers.mjs";
+import { buildAccountChooserCandidateLabels, classifyChatAuthPage, isAuthNavigationError, normalizeLoginProbeResult } from "./auth-flow-helpers.mjs";
 
 const rawConfig = process.argv[2];
 if (!rawConfig) {
@@ -271,10 +271,19 @@ async function launchTargetBrowser() {
   await closeTargetBrowser();
   const args = [...targetBrowserBaseArgs({ withLaunchOptions: true, mode: "headed" }), "open", "about:blank"];
   await log(`Launching isolated browser: agent-browser ${JSON.stringify(args)}`);
-  const result = await spawnCommand(AGENT_BROWSER_BIN, args, { allowFailure: true, timeoutMs: AGENT_BROWSER_COMMAND_TIMEOUT_MS });
-  await log(`launch result: code=${result.code} stdout=${JSON.stringify(result.stdout)} stderr=${JSON.stringify(result.stderr)}`);
-  if (result.code !== 0) {
-    throw new Error(result.stderr || result.stdout || "Failed to launch isolated oracle browser");
+  const deadline = Date.now() + AGENT_BROWSER_COMMAND_TIMEOUT_MS;
+  while (true) {
+    const result = await spawnCommand(AGENT_BROWSER_BIN, args, { allowFailure: true, timeoutMs: Math.max(1, deadline - Date.now()) });
+    await log(`launch result: code=${result.code} stdout=${JSON.stringify(result.stdout)} stderr=${JSON.stringify(result.stderr)}`);
+    if (result.code === 0) return;
+    const message = result.stderr || result.stdout || "Failed to launch isolated oracle browser";
+    // agent-browser can return from close before its daemon socket disappears. This configure
+    // failure happens before open is dispatched; other launch errors are not safe to retry.
+    if (!/Could not configure browser: Failed to connect: No such file or directory/i.test(message) || Date.now() >= deadline) {
+      throw new Error(message);
+    }
+    await log("Waiting for the closing agent-browser daemon before retrying launch");
+    await sleep(Math.min(250, deadline - Date.now()));
   }
 }
 
@@ -358,7 +367,7 @@ async function snapshotText() {
 }
 
 async function pageText() {
-  const { stdout } = await targetCommand("get", "text", "body", { allowFailure: true, logLabel: "get text body" });
+  const { stdout } = await targetCommand("get", "text", "body", { logLabel: "get text body" });
   return stdout || "";
 }
 
@@ -446,7 +455,16 @@ function formatAuthFailureGuidance(error) {
   const reason = error instanceof Error ? error.message : String(error);
   const lines = ["Oracle auth failed.", "", `Reason: ${reason}`, "", "Likely causes:"];
 
-  if (usesConfiguredChromiumCookieSource()) {
+  if (isAuthNavigationError(error) || /browser was closed|Timed out verifying synced/i.test(reason)) {
+    lines.push(
+      "- the isolated browser navigated, closed, or never settled during verification",
+      "- this browser verification failure does not by itself prove the source cookies are invalid",
+      "",
+      "Next:",
+      "1. Re-run /oracle-auth and leave the isolated browser open while verification completes.",
+      "2. If it fails again, inspect the diagnostics below.",
+    );
+  } else if (usesConfiguredChromiumCookieSource()) {
     lines.push(
       "- the configured cookie DB is stale or from the wrong browser profile",
       `- ${providerName()} is logged out in that browser profile`,
@@ -639,6 +657,7 @@ function buildLoginProbeScript(timeoutMs) {
     let bodyKeys = [];
     let bodyHasId = false;
     let bodyHasEmail = false;
+    let bodyIsAnonymous = false;
     let resultName = '';
     let responsePreview = '';
     try {
@@ -658,6 +677,7 @@ function buildLoginProbeScript(timeoutMs) {
             if (data && typeof data === 'object' && !Array.isArray(data)) {
               bodyKeys = Object.keys(data).slice(0, 12);
               bodyHasId = typeof data.id === 'string' && data.id.length > 0;
+              bodyIsAnonymous = typeof data.id === 'string' && data.id.startsWith('ua-');
               bodyHasEmail = typeof data.email === 'string' && data.email.includes('@');
               const name = typeof data.name === 'string' ? data.name.trim() : '';
               if (name) resultName = name;
@@ -688,6 +708,7 @@ function buildLoginProbeScript(timeoutMs) {
       bodyKeys,
       bodyHasId,
       bodyHasEmail,
+      bodyIsAnonymous,
       name: resultName,
       responsePreview,
     };
@@ -798,7 +819,19 @@ async function waitForImportedAuthReady() {
   let iteration = 0;
   while (Date.now() < timeoutAt) {
     iteration += 1;
-    const [url, snapshot, body, probe] = await Promise.all([getUrl(), snapshotText(), pageText(), loginProbe()]);
+    // Drain all reads before retrying or closing the browser: Promise.all can reject while the
+    // other CDP commands are still running against a page that a normal redirect just replaced.
+    const reads = await Promise.allSettled([getUrl(), snapshotText(), pageText(), loginProbe()]);
+    const failures = reads.filter((read) => read.status === "rejected");
+    const fatal = failures.find((read) => !isAuthNavigationError(read.reason));
+    if (fatal) throw fatal.reason;
+    if (failures.length > 0) {
+      await log(`poll ${iteration}: auth page navigated during verification; discarding partial reads and retrying`);
+      await ensureBrowserConnected();
+      await sleep(config.auth.pollMs);
+      continue;
+    }
+    const [url, snapshot, body, probe] = /** @type {[string, string, string, import("./auth-flow-helpers.d.mts").OracleAuthLoginProbe]} */ (reads.map((read) => read.status === "fulfilled" ? read.value : undefined));
     await writeFile(URL_PATH, `${url}\n`, { mode: 0o600 }).catch(() => undefined);
     await writeFile(SNAPSHOT_PATH, `${snapshot}\n`, { mode: 0o600 }).catch(() => undefined);
     await writeFile(BODY_PATH, `${body}\n`, { mode: 0o600 }).catch(() => undefined);

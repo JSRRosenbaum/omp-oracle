@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { classifyChatAuthPage } from "./auth-flow-helpers.mjs";
+import { classifyChatAuthPage, isAuthNavigationError, normalizeLoginProbeResult } from "./auth-flow-helpers.mjs";
 
 const base = {
   url: "https://chatgpt.com/",
@@ -54,4 +54,22 @@ test("Cloudflare verification may settle but a blocking challenge remains distin
     }).state,
     "challenge_blocking",
   );
+});
+
+test("an anonymous ua-* visitor beside login controls is signed out, never an account to resolve", () => {
+  // /backend-api/me answers 200 with a ua-* id for a logged-out visitor.
+  const probe = (fields) => normalizeLoginProbeResult({ ok: false, status: 200, bodyHasId: true, ...fields });
+  for (const signal of [{ domLoginCta: true }, { onAuthPage: true }]) {
+    assert.equal(classifyChatAuthPage({ ...base, probe: probe({ bodyIsAnonymous: true, ...signal }) }).state, "login_required");
+  }
+  assert.equal(classifyChatAuthPage({ ...base, probe: probe({ onAuthPage: true }) }).state, "auth_transitioning");
+});
+
+test("only CDP navigation interruptions make an auth read retryable", () => {
+  for (const message of ["Execution context was destroyed, most likely because of a navigation.", "Inspected target navigated or closed", "Cannot find context with specified id"]) {
+    assert.equal(isAuthNavigationError(new Error(message)), true, message);
+  }
+  for (const message of ["The isolated oracle browser was closed before auth verification completed.", "agent-browser timed out after 30000ms"]) {
+    assert.equal(isAuthNavigationError(new Error(message)), false, message);
+  }
 });

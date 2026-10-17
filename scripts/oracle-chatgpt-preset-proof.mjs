@@ -6,6 +6,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -69,19 +70,23 @@ function currentGitStatus() {
 }
 
 function canonicalPresets() {
-  const configSource = readFileSync(resolve(REPO_ROOT, "extensions/oracle/lib/config.ts"), "utf8");
-  const registryMatch = configSource.match(/export const ORACLE_SUBMIT_PRESETS = \{([\s\S]*?)\n\} as const;/);
-  if (!registryMatch) throw new Error("Could not locate ORACLE_SUBMIT_PRESETS registry in extensions/oracle/lib/config.ts");
-  const entries = [...registryMatch[1].matchAll(
-    /^\s{2}([a-z0-9_]+):\s*\{\s*label:\s*"[^"]+",\s*modelFamily:\s*"([a-z]+)"\s+as const(?:,\s*effort:\s*"([a-z]+)"\s+as const)?(?:,\s*tool:\s*"([a-z_]+)"\s+as const)?,\s*autoSwitchToThinking:\s*(true|false)\s*\}/gm,
-  )];
-  if (entries.length === 0) throw new Error("Could not parse ORACLE_SUBMIT_PRESETS registry entries");
-  return Object.fromEntries(entries.map((match) => [match[1], {
-    modelFamily: match[2],
-    effort: match[3],
-    tool: match[4],
-    autoSwitchToThinking: match[5] === "true",
-  }]));
+  // Import the registry through the same TypeScript loader used by the sanity harness.
+  // Source formatting must never silently remove a preset from the release gate.
+  const tsx = createRequire(import.meta.url).resolve("tsx");
+  const stdout = execFileSync(process.execPath, [
+    "--import", tsx,
+    "--input-type=module",
+    "--eval",
+    "const mod = await import('./extensions/oracle/lib/config.ts');" +
+    "const presets = Object.fromEntries(Object.entries(mod.ORACLE_SUBMIT_PRESETS).map(([id, preset]) => [id, {" +
+    "modelFamily: preset.modelFamily, effort: preset.effort, tool: preset.tool, autoSwitchToThinking: preset.autoSwitchToThinking }]));" +
+    "process.stdout.write(JSON.stringify(presets));",
+  ], { cwd: REPO_ROOT, encoding: "utf8" });
+  const presets = JSON.parse(stdout);
+  if (!presets || typeof presets !== "object" || Object.keys(presets).length === 0) {
+    throw new Error("ORACLE_SUBMIT_PRESETS registry resolved to no presets");
+  }
+  return presets;
 }
 
 // Composer-tool presets (Deep Research) read their report from a cross-origin App

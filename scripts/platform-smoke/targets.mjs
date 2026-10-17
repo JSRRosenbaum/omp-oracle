@@ -285,7 +285,7 @@ export async function runTargetSuite(config, targetName, suiteName, leaseSession
       { id: "packed-node-install", fn: () => /PLATFORM_PACKED_NODE_INSTALL_EXIT=0/.test(stdout) },
       { id: "pi-install", fn: () => /PLATFORM_PI_INSTALL_EXIT=0/.test(stdout) },
       { id: "pi-list", fn: () => /PLATFORM_PI_LIST_EXIT=0/.test(stdout) && listOutput.includes(packageName) && packageInstallPattern.test(listOutput) },
-      { id: "no-source-extension-path", fn: () => !/\bpi\s+(?:-e|--extension)\s+\./.test(stdout) },
+      { id: "no-source-extension-path", fn: () => !/\bpi\s+(?:-e|--extension)\s+\./.test(command), error: "platform-build must execute through the packed install path, not a source extension" },
       { id: "no-secrets", fn: () => violations.length === 0, error: "redaction violations found" },
     ];
     expectedFiles = [
@@ -302,7 +302,7 @@ export async function runTargetSuite(config, targetName, suiteName, leaseSession
       { id: "real-smoke-doctor", fn: () => stdout.includes("Oracle real smoke doctor") && stdout.includes(`provider: ${provider}`) },
       { id: "real-smoke-marker", fn: () => stdout.includes("Oracle real smoke passed:") },
       { id: "real-smoke-packed-install", fn: () => stdout.includes("mode=packed") && stdout.includes(`extension=./node_modules/${packageName}`) },
-      { id: "real-smoke-no-source-extension", fn: () => !stdout.includes("extensions/oracle/index.ts") && !/\bpi\s+(?:-e|--extension)\s+extensions\/oracle/.test(stdout) },
+      { id: "real-smoke-no-source-extension", fn: () => !command.includes("extensions/oracle/index.ts") && !/\bpi\s+(?:-e|--extension)\s+extensions\/oracle/.test(command) },
       { id: "no-secrets", fn: () => violations.length === 0, error: "redaction violations found" },
     ];
     expectedFiles = [

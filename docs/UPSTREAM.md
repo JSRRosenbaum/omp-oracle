@@ -55,12 +55,21 @@ Per-release changes are recorded in [Changelog](../CHANGELOG.md).
 ## Tracking upstream
 
 - **Merge, never rebase.** Upstream commits land as explicit merge commits so shared history stays
-  intact. The latest recorded sync is upstream `4d96ffc` (2026-09-22), after
-  `upstream-compat-20260918`: it imports cancellation-race and protected-profile test improvements
-  plus a native Pi status smoke adapted to the fork's Pi `0.80.9` lockfile, while keeping runtime
-  code, package identity, CI/Dependabot, and release gates fork-owned (upstream's shared
-  compatibility fleet, Renovate policy, and Pi `0.86.1` dependency update are not adopted, and
-  that test-only sync does not expand provider or platform qualification claims).
+  intact. The latest recorded sync is upstream `d658a98` (2026-10-17, `pi-oracle` 0.7.22). It ports
+  the runtime fixes the fork shares: anonymous `ua-*` visitor sessions classified as signed out,
+  `/oracle-auth` reads retried across CDP navigation with failure guidance that separates browser
+  verification from rejected cookies, the `/oracle-auth` launch retry for a closing
+  `agent-browser` daemon, and a `before_agent_start` guard for prompt-less custom-message turns on
+  newer `pi` hosts; and the test-audit repairs (false-green assertions replaced by behavioral proof,
+  the `loadConfigFn` test seam removed, npm 12 `npm pack --json` parsing, `ENOTEMPTY` cleanup
+  retries). Not adopted: the native Linux Chromium v11 cookie importer (Linux Chromium users keep
+  the documented safe-storage password override), the Pi 1.x development baseline and its
+  shrinkwrapped dependency graph, the README and docs reorganization, npm auto-publish CI, the
+  Ubuntu image bump, and the shared compatibility fleet; upstream's composer-label, Power-slider,
+  and jobs-directory fixes were already covered by the fork. The previous sync, upstream
+  `4d96ffc` (2026-09-22), imported cancellation-race and protected-profile test improvements plus
+  a native Pi status smoke while keeping runtime code, package identity, CI, and release gates
+  fork-owned.
 - **Release tags and version numbering.** Upstream's `v0.1.0`–`v0.7.20` tags remain in
   `fitchmultz/pi-oracle`. The fork's `v*` tags and npm versions restarted at `0.1.0` (based on
   upstream `0.7.20`), and [Changelog](../CHANGELOG.md) records the upstream base above the

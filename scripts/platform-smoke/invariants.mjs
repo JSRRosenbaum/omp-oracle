@@ -33,6 +33,23 @@ function testTargetSelection() {
   assert.match(`${result.stdout ?? ""}\n${result.stderr ?? ""}`, /unsupported target: not-a-target/);
 }
 
+function testEmptySelectionsRejected() {
+  for (const target of [",,", "", "   "]) {
+    const result = runNode(["scripts/platform-smoke.mjs", "run", "--target", target, "--suite", "platform-build"]);
+    assert.ifError(result.error);
+    assert.notEqual(result.status, 0, "an empty resolved target selection must fail instead of running nothing");
+    assert.match(`${result.stdout ?? ""}\n${result.stderr ?? ""}`, /--target did not resolve to any targets/);
+    assert.doesNotMatch(result.stdout, /=== Target:/, "an empty target selection must not launch any target");
+  }
+  for (const suite of ["", "   "]) {
+    const result = runNode(["scripts/platform-smoke.mjs", "run", "--target", "ubuntu", "--suite", suite]);
+    assert.ifError(result.error);
+    assert.notEqual(result.status, 0, "an empty resolved suite selection must fail instead of running nothing");
+    assert.match(`${result.stdout ?? ""}\n${result.stderr ?? ""}`, /--suite did not resolve to any suites/);
+    assert.doesNotMatch(result.stdout, /=== Target:/, "an empty suite selection must not launch any target");
+  }
+}
+
 function testPackedInstallCommandRendering() {
   const command = buildPlatformBuildCommand("ubuntu", config.packageName, config.nodeValidationMajor);
   assert.match(command, /verify:oracle:platform/, "platform-build should run the platform-focused verification gate");
@@ -71,7 +88,9 @@ function testCleanupFailureInvariant() {
 function testPackageExclusion() {
   const result = spawnSync("npm", ["pack", "--dry-run", "--json"], { cwd: repoRoot, encoding: "utf8", shell: process.platform === "win32" });
   assert.equal(result.status, 0, `npm pack dry-run failed: ${result.stderr}`);
-  const files = JSON.parse(result.stdout)[0].files.map((file) => file.path);
+  // npm 11 returns an array; npm 12 keys the same records by package name.
+  const [pack] = Object.values(JSON.parse(result.stdout));
+  const files = pack.files.map((file) => file.path);
   for (const forbidden of [".artifacts/", ".crabbox/", ".debug/", ".platform-smoke-runs/", ".env", "context.md"]) {
     assert(!files.some((file) => file === forbidden || file.startsWith(forbidden)), `package should exclude ${forbidden}`);
   }
@@ -114,6 +133,7 @@ function testRealSmokeExpensiveAgentPathsAreOptIn() {
 
 testHelpTextIncludesTargetsAndExamples();
 testTargetSelection();
+testEmptySelectionsRejected();
 testPackedInstallCommandRendering();
 testRealExtensionPackedInstallRendering();
 testManifestFailure();

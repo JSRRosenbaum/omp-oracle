@@ -8,6 +8,7 @@ import { createCipheriv, createHash, pbkdf2Sync, randomBytes, randomUUID } from 
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { hostname, tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { basename, delimiter, dirname, join } from "node:path";
@@ -993,11 +994,10 @@ while :; do sleep 1; done
 
     assert(!result.timedOut, "auth bootstrap should not hang when agent-browser close stalls");
     assert(result.code !== 0, "auth bootstrap timeout smoke test should still fail because source cookies are unavailable");
-    if (await waitForPath(browserPidPath)) {
-      const browserPid = Number.parseInt((await readFile(browserPidPath, "utf8")).trim(), 10);
-      assert(Number.isFinite(browserPid), "auth bootstrap timeout test should record an agent-browser pid");
-      assert(await waitForPidExit(browserPid), "auth bootstrap should terminate the hung agent-browser process after timing out");
-    }
+    assert(await waitForPath(browserPidPath), "auth bootstrap timeout test should record an agent-browser pid file before close timeout handling");
+    const browserPid = Number.parseInt((await readFile(browserPidPath, "utf8")).trim(), 10);
+    assert(Number.isFinite(browserPid), "auth bootstrap timeout test should record an agent-browser pid");
+    assert(await waitForPidExit(browserPid), "auth bootstrap should terminate the hung agent-browser process after timing out");
   } finally {
     await rm(fixtureDir, { recursive: true, force: true });
   }
@@ -2757,34 +2757,59 @@ async function testQueuedPromotionUsesPersistedConfigSnapshot(config: OracleConf
   const cwd = process.cwd();
   const sessionId = "/tmp/oracle-sanity-session-queue-config.jsonl";
   const queuedId = await createJobForTest(config, cwd, sessionId, { initialState: "queued" });
+  const fixtureDir = await mkdtemp(join(tmpdir(), "oracle-queued-config-snapshot-"));
+  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
+  const jobIds = [queuedId];
+  try {
+    const agentDir = join(fixtureDir, "agent");
+    await mkdir(join(agentDir, "extensions"), { recursive: true, mode: 0o700 });
+    await writeFile(
+      join(agentDir, "extensions", "oracle.json"),
+      `${JSON.stringify({ browser: { maxConcurrentJobs: config.browser.maxConcurrentJobs + 1, executablePath: "/tmp/changed-browser" } }, null, 2)}\n`,
+      { encoding: "utf8", mode: 0o600 },
+    );
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+    const changedConfig = loadOracleConfig(cwd);
+    assert(changedConfig.browser.maxConcurrentJobs === config.browser.maxConcurrentJobs + 1 && changedConfig.browser.executablePath === "/tmp/changed-browser", "the real config loader should observe the changed on-disk agent config");
 
-  let loadConfigCalls = 0;
-  const promoted = await promoteQueuedJobsWithinAdmissionLock({
-    workerPath: "/tmp/fake-oracle-worker.mjs",
-    source: "oracle-sanity-config-snapshot",
-    spawnWorkerFn: async () => ({ pid: 7777, nonce: "config-snapshot", startedAt: "config-started" }),
-    loadConfigFn: () => {
-      loadConfigCalls += 1;
-      return {
-        ...config,
-        browser: {
-          ...config.browser,
-          maxConcurrentJobs: config.browser.maxConcurrentJobs + 1,
-          executablePath: "/tmp/changed-browser",
-        },
-      };
-    },
-  });
+    const promoted = await promoteQueuedJobsWithinAdmissionLock({
+      workerPath: "/tmp/fake-oracle-worker.mjs",
+      source: "oracle-sanity-config-snapshot",
+      spawnWorkerFn: async () => ({ pid: 7777, nonce: "config-snapshot", startedAt: "config-started" }),
+    });
 
-  assert(promoted.promotedJobIds.includes(queuedId), "queued jobs should still promote using their persisted config snapshot");
-  assert(loadConfigCalls === 0, "queued promotion should not reload config from disk when the job already has a persisted snapshot");
-  const promotedJob = readJob(queuedId);
-  assert(promotedJob?.config.browser.maxConcurrentJobs === config.browser.maxConcurrentJobs, "queued promotion should preserve the submitted config snapshot");
-  assert(promotedJob?.config.browser.executablePath === config.browser.executablePath, "queued promotion should not overwrite persisted browser settings");
+    assert(promoted.promotedJobIds.includes(queuedId), "queued jobs should still promote using their persisted config snapshot");
+    const promotedJob = readJob(queuedId);
+    assert(promotedJob?.config.browser.maxConcurrentJobs === config.browser.maxConcurrentJobs, "queued promotion must keep the submitted config snapshot even when the on-disk agent config changed after submission");
+    assert(promotedJob?.config.browser.executablePath === config.browser.executablePath, "queued promotion must not overwrite persisted browser settings with changed on-disk config values");
 
-  await releaseRuntimeLease(promotedJob?.runtimeId);
-  await completeJob(queuedId);
-  await cleanupJob(queuedId);
+    await releaseRuntimeLease(promotedJob?.runtimeId);
+    await completeJob(queuedId);
+
+    // The snapshot's cap (1) must block admission while the changed disk cap (2) would allow it.
+    const blockerId = await createJobForTest(config, cwd, sessionId, { initialState: "submitted" });
+    jobIds.push(blockerId);
+    const blocker = readJob(blockerId);
+    assert(blocker?.runtimeId, "admission-capacity blocker job should record a runtime id");
+    await writeLeaseMetadata("runtime", blocker.runtimeId, buildRuntimeLeaseMetadata(blocker, new Date().toISOString()));
+    const blockedId = await createJobForTest(config, cwd, sessionId, { initialState: "queued" });
+    jobIds.push(blockedId);
+    const blocked = await promoteQueuedJobsWithinAdmissionLock({
+      workerPath: "/tmp/fake-oracle-worker.mjs",
+      source: "oracle-sanity-config-snapshot",
+      spawnWorkerFn: async () => ({ pid: 7778, nonce: "config-snapshot", startedAt: "config-started" }),
+    });
+    assert(!blocked.promotedJobIds.includes(blockedId), "queued promotion admission must enforce the submitted snapshot's concurrency cap instead of the changed on-disk config cap");
+    assert(readJob(blockedId)?.status === "queued", "capacity-blocked queued jobs must stay queued for a later promotion pass");
+  } finally {
+    if (originalAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = originalAgentDir;
+    for (const jobId of jobIds) {
+      await releaseRuntimeLease(readJob(jobId)?.runtimeId);
+      await cleanupJob(jobId);
+    }
+    await rm(fixtureDir, { recursive: true, force: true });
+  }
 }
 
 async function testQueuedPromotionRequiresArchiveReadiness(config: OracleConfig): Promise<void> {
@@ -3374,11 +3399,45 @@ async function testChromiumCookieSourceReadsConfiguredKeychain(): Promise<void> 
   try {
     await mkdir(binDir, { recursive: true, mode: 0o700 });
     if (process.platform === "win32") {
-      await writeFile(join(binDir, "security.cmd"), `@echo off\r\necho ${keychainPassword}\r\n`, { encoding: "utf8", mode: 0o700 });
+      await writeFile(
+        join(binDir, "security.cmd"),
+        [
+          "@echo off",
+          "setlocal",
+          "set \"args=%*\"",
+          "if not \"%~1\"==\"find-generic-password\" goto refuse",
+          "if not \"%~2\"==\"-w\" goto refuse",
+          "if not \"%~3\"==\"-a\" goto refuse",
+          "if not \"%~4\"==\"Helium\" goto refuse",
+          "if not \"%~5\"==\"-s\" goto refuse",
+          "if not \"%~6\"==\"Helium\" goto refuse",
+          "if not \"%~7\"==\"Storage\" goto refuse",
+          "if not \"%~8\"==\"Key\" goto refuse",
+          "if not \"%~9\"==\"\" goto refuse",
+          `echo ${keychainPassword}`,
+          "exit /b 0",
+          ":refuse",
+          "echo mock security refusing keychain request: %args% 1>&2",
+          "exit /b 1",
+        ].join("\r\n") + "\r\n",
+        { encoding: "utf8", mode: 0o700 },
+      );
     } else {
       await writeExecutableScript(
         join(binDir, "security"),
         `#!/bin/sh
+account=
+service=
+prev=
+for arg in "$@"; do
+  if [ "$prev" = "-a" ]; then account=$arg; fi
+  if [ "$prev" = "-s" ]; then service=$arg; fi
+  prev=$arg
+done
+if [ "$1" != "find-generic-password" ] || [ "$account" != "Helium" ] || [ "$service" != "Helium Storage Key" ]; then
+  echo "mock security refusing keychain request for account=$account service=$service" >&2
+  exit 1
+fi
 printf '%s\\n' ${shellQuote(keychainPassword)}
 `,
       );
@@ -3511,9 +3570,11 @@ function testAuthCookiePolicy(): void {
   assert(keptNames.includes("auth_token@x.com"), "X auth token should be kept for Grok auth continuity");
   assert(keptNames.includes("ct0@x.com"), "X CSRF cookie should be kept for Grok auth continuity");
   assert(!keptNames.includes("guest_id@x.com"), "ambient X cookies should be dropped unless explicitly required for Grok auth");
+  assert(!keptNames.includes("oai-client-auth-info@evil.example"), "foreign-domain cookies must be absent from imported cookies even when a foreign-domain drop is logged");
   assert(droppedReasons.includes("noise"), "expected noise cookies to be classified and dropped");
   assert(droppedReasons.includes("non-auth"), "expected unknown cookies to be classified and dropped");
   assert(droppedReasons.includes("foreign-domain"), "expected foreign-domain cookies to be classified and dropped");
+  assert(filtered.dropped.some(({ cookie, reason }) => cookie.name === "oai-client-auth-info" && cookie.domain === "evil.example" && reason === "foreign-domain"), "the foreign-domain oai-client-auth-info cookie itself must be dropped with the foreign-domain reason");
 
   const ensured = ensureAccountCookie(filtered.cookies, "https://chatgpt.com/");
   const synthesizedAccount = ensured.cookies.find((cookie) => cookie.name === "_account");
@@ -3805,7 +3866,6 @@ async function testOraclePromptTemplateCutover(): Promise<void> {
     engines?: { node?: string };
     os?: string[];
     scripts?: Record<string, string | undefined> & { test?: string; prepublishOnly?: string; "typecheck:worker-helpers"?: string; "verify:oracle"?: string };
-    overrides?: { "basic-ftp"?: string; protobufjs?: string };
     devDependencies?: Record<string, string | undefined>;
     peerDependencies?: Record<string, string | undefined>;
     peerDependenciesMeta?: Record<string, { optional?: boolean } | undefined>;
@@ -4208,8 +4268,6 @@ async function testOraclePromptTemplateCutover(): Promise<void> {
   assert(readmeSource.includes("Pi `0.80.9+` is the suggested tested floor") && readmeSource.includes("optional wildcard peers"), "README should document the suggested Pi 0.80.9 floor without making it a hard peer requirement");
   assert(designSource.includes("pi` 0.80.9+") || designSource.includes("`pi` 0.80.9+"), "design doc should name the current suggested Pi 0.80.9 compatibility floor");
   assert(configSource.includes("ProjectTrustStore") && configSource.includes("saved untrusted decision"), "oracle project config loading should preserve compatibility while respecting explicit Pi distrust state");
-  assert(pkg.overrides?.["basic-ftp"] === "6.0.1", "package.json should override basic-ftp to the latest patched stable version compatible with @google/genai");
-  assert(pkg.overrides?.protobufjs === "7.6.1", "package.json should override protobufjs to a patched stable version compatible with @google/genai");
   assert(commandsSource.includes("Cancel a queued or active oracle job"), "oracle commands should allow queued-job cancellation");
   assert(commandsSource.includes("formatOracleJobSummary"), "oracle commands should format job status output through the shared observability helper");
   assert(commandsSource.includes("recently woken jobs may stay retained briefly"), "oracle-clean help text should mention the short post-send retention grace window");
@@ -4664,16 +4722,14 @@ while :; do sleep 1; done
       "timed out",
     );
 
-    if (await waitForPath(tarPidPath)) {
-      const tarPid = Number.parseInt((await readFile(tarPidPath, "utf8")).trim(), 10);
-      assert(Number.isFinite(tarPid), "archive timeout test should record a tar pid");
-      assert(await waitForPidExit(tarPid), "archive timeout should terminate the hung tar process");
-    }
-    if (await waitForPath(zstdPidPath)) {
-      const zstdPid = Number.parseInt((await readFile(zstdPidPath, "utf8")).trim(), 10);
-      assert(Number.isFinite(zstdPid), "archive timeout test should record a zstd pid");
-      assert(await waitForPidExit(zstdPid), "archive timeout should terminate the hung zstd process");
-    }
+    assert(await waitForPath(tarPidPath), "archive timeout test should record a tar pid file before timeout handling");
+    const tarPid = Number.parseInt((await readFile(tarPidPath, "utf8")).trim(), 10);
+    assert(Number.isFinite(tarPid), "archive timeout test should record a tar pid");
+    assert(await waitForPidExit(tarPid), "archive timeout should terminate the hung tar process");
+    assert(await waitForPath(zstdPidPath), "archive timeout test should record a zstd pid file before timeout handling");
+    const zstdPid = Number.parseInt((await readFile(zstdPidPath, "utf8")).trim(), 10);
+    assert(Number.isFinite(zstdPid), "archive timeout test should record a zstd pid");
+    assert(await waitForPidExit(zstdPid), "archive timeout should terminate the hung zstd process");
   } finally {
     process.env.PATH = originalPath;
     if (originalTarBin === undefined) delete process.env.PI_ORACLE_TEST_TAR_BIN;
@@ -4901,9 +4957,10 @@ function testDurableWorkerHandoff(): void {
 }
 
 function testSharedJobCoordinationHelpers(): void {
-  const earlier = { id: "job-a", createdAt: "2026-01-01T00:00:00.000Z", queuedAt: "2026-01-01T00:00:05.000Z" };
-  const later = { id: "job-b", createdAt: "2026-01-01T00:00:01.000Z", queuedAt: "2026-01-01T00:00:06.000Z" };
-  assert(compareQueuedOracleJobs(earlier, later) < 0, "shared queue ordering should prefer earlier queuedAt timestamps");
+  const queuedFirst = { id: "job-z", createdAt: "2026-01-01T00:00:02.000Z", queuedAt: "2026-01-01T00:00:05.000Z" };
+  const createdFirst = { id: "job-a", createdAt: "2026-01-01T00:00:01.000Z", queuedAt: "2026-01-01T00:00:06.000Z" };
+  assert(compareQueuedOracleJobs(queuedFirst, createdFirst) < 0, "shared queue ordering should prefer earlier queuedAt even when the other job was created earlier and sorts earlier by id");
+  assert(compareQueuedOracleJobs(createdFirst, queuedFirst) > 0, "shared queue ordering should be antisymmetric under conflicting queuedAt/createdAt/id order");
 
   const runtimeMetadata = buildRuntimeLeaseMetadata({
     id: "job-runtime",
@@ -5261,7 +5318,11 @@ function testSharedLifecycleHelpers(): void {
   });
   assert(!observed.wakeupSettledAt && observed.wakeupObservedSource === "oracle_status", "shared lifecycle helpers should record pre-send wake-up observations without suppressing the first reminder");
 
-  const notified = markOracleJobNotified(appendOracleJobLifecycleEvent(settled, {
+  const notified = markOracleJobNotified(appendOracleJobLifecycleEvent({
+    ...settled,
+    notifyClaimedBy: "oracle:test-claimant",
+    notifyClaimedAt: "2026-01-01T00:00:47.000Z",
+  }, {
     at: "2026-01-01T00:00:45.000Z",
     source: "oracle:test",
     kind: "notification",
@@ -5273,7 +5334,7 @@ function testSharedLifecycleHelpers(): void {
     notificationSessionKey: "project::session",
     notificationSessionFile: "/repo/.pi/session.jsonl",
   });
-  assert(notified.notifiedAt === "2026-01-01T00:00:50.000Z" && notified.wakeupAttemptCount === 1 && notified.wakeupLastRequestedAt === "2026-01-01T00:00:35.000Z" && !notified.notifyClaimedBy, "shared lifecycle helpers should clear notification claims while preserving wake-up attempt state for cleanup grace and observability");
+  assert(notified.notifiedAt === "2026-01-01T00:00:50.000Z" && notified.wakeupAttemptCount === 1 && notified.wakeupLastRequestedAt === "2026-01-01T00:00:35.000Z" && !notified.notifyClaimedBy && !notified.notifyClaimedAt, "shared lifecycle helpers should clear actually-present notification claims while preserving wake-up attempt state for cleanup grace and observability");
 }
 
 async function testWorkerFieldPresentation(config: OracleConfig): Promise<void> {
@@ -5936,6 +5997,14 @@ function testChatGptUiHelpers(): void {
     deriveAssistantCompletionSignature({
       hasStopStreaming: false,
       hasTargetCopyResponse: false,
+      responseText: "Answer body",
+    }) === undefined,
+    "nonempty response text without copy-response evidence must not complete the turn",
+  );
+  assert(
+    deriveAssistantCompletionSignature({
+      hasStopStreaming: false,
+      hasTargetCopyResponse: false,
       responseText: "",
       artifactLabels: ["report.csv", "chart.png", "report.csv"],
     }) === "artifacts:chart.png|report.csv",
@@ -6216,12 +6285,69 @@ async function testRunnerAndSmokeFailureContracts(): Promise<void> {
 }
 
 async function testSanityRunnerIsolation(): Promise<void> {
-  const runnerSource = await readFile(new URL("./oracle-sanity-runner.mjs", import.meta.url), "utf8");
-  assert(runnerSource.includes("/tmp/pi-oracle-sanity-state-"), "sanity runner should force an isolated oracle state dir");
-  assert(runnerSource.includes("/tmp/pi-oracle-sanity-jobs-"), "sanity runner should force an isolated oracle jobs dir");
-  assert(!runnerSource.includes("process.env.PI_ORACLE_STATE_DIR?.trim()"), "sanity runner should not reuse inherited production state dir env");
-  assert(!runnerSource.includes("process.env.PI_ORACLE_JOBS_DIR?.trim()"), "sanity runner should not reuse inherited production jobs dir env");
-  assert((await readFile(new URL("./oracle-sanity.ts", import.meta.url), "utf8")).includes("assertIsolatedSanityEnvironment();"), "sanity entrypoint should fail fast when invoked without isolated oracle temp dirs");
+  const tsxCli = createRequire(import.meta.url).resolve("tsx/cli");
+  const missingDirsEnv = { ...process.env };
+  delete missingDirsEnv.PI_ORACLE_STATE_DIR;
+  delete missingDirsEnv.PI_ORACLE_JOBS_DIR;
+  const refusal = await runProcess(process.execPath, [tsxCli, "scripts/oracle-sanity.ts"], {
+    env: missingDirsEnv,
+    timeoutMs: 30_000,
+  });
+  assert(!refusal.timedOut && refusal.code !== null && refusal.code !== 0 && refusal.stderr.includes("Refusing to run oracle sanity checks without isolated"), `sanity entrypoint should fail fast without isolated oracle temp dirs (code=${refusal.code})`);
+
+  const unsafeDefault = await runProcess(process.execPath, [tsxCli, "scripts/oracle-sanity.ts"], {
+    env: { ...process.env, PI_ORACLE_STATE_DIR: "/tmp/pi-oracle-state", PI_ORACLE_JOBS_DIR: "/tmp" },
+    timeoutMs: 30_000,
+  });
+  assert(!unsafeDefault.timedOut && unsafeDefault.code !== null && unsafeDefault.code !== 0 && unsafeDefault.stderr.includes("Refusing to run oracle sanity checks without isolated"), `sanity entrypoint should refuse the production default oracle dirs (code=${unsafeDefault.code})`);
+
+  // Run a byte-identical wrapper against a probe entrypoint that records and touches
+  // both received paths. Reusing either inherited directory would touch its marker.
+  const fixtureDir = await mkdtemp(join(tmpdir(), "oracle-runner-inherit-fixture-"));
+  const markerState = join(fixtureDir, "inherited-state");
+  const markerJobs = join(fixtureDir, "inherited-jobs");
+  try {
+    await mkdir(markerState);
+    await mkdir(markerJobs);
+    await mkdir(join(fixtureDir, "scripts"));
+    const runnerCopyPath = join(fixtureDir, "scripts", "oracle-sanity-runner.mjs");
+    await writeFile(runnerCopyPath, await readFile(new URL("./oracle-sanity-runner.mjs", import.meta.url), "utf8"), { mode: 0o700 });
+    await writeFile(
+      join(fixtureDir, "scripts", "oracle-sanity.ts"),
+      [
+        'import { mkdirSync, writeFileSync } from "node:fs";',
+        'const received = { state: process.env.PI_ORACLE_STATE_DIR ?? "", jobs: process.env.PI_ORACLE_JOBS_DIR ?? "" };',
+        'mkdirSync(received.state, { recursive: true });',
+        'writeFileSync(`${received.state}/probe.txt`, "state\\n");',
+        'mkdirSync(received.jobs, { recursive: true });',
+        'writeFileSync(`${received.jobs}/probe.txt`, "jobs\\n");',
+        'writeFileSync(process.env.ORACLE_SANITY_PROBE_OUT!, `${JSON.stringify(received)}\\n`);',
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o600 },
+    );
+    await symlink(join(import.meta.dirname, "..", "node_modules"), join(fixtureDir, "node_modules"), process.platform === "win32" ? "junction" : "dir");
+    const probeOutPath = join(fixtureDir, "received.json");
+    const probe = await runProcess(process.execPath, [runnerCopyPath], {
+      cwd: fixtureDir,
+      env: {
+        ...process.env,
+        PI_ORACLE_STATE_DIR: markerState,
+        PI_ORACLE_JOBS_DIR: markerJobs,
+        ORACLE_SANITY_PROBE_OUT: probeOutPath,
+      },
+      timeoutMs: 30_000,
+    });
+    assert(!probe.timedOut && probe.code === 0, `sanity wrapper inheritance probe should exit cleanly (code=${probe.code}): ${probe.stderr}`);
+    const received = JSON.parse(await readFile(probeOutPath, "utf8"));
+    assert(typeof received.state === "string" && received.state.startsWith("/tmp/pi-oracle-sanity-state-") && received.state !== markerState, `sanity runner must override inherited state dir, child received ${received.state}`);
+    assert(typeof received.jobs === "string" && received.jobs.startsWith("/tmp/pi-oracle-sanity-jobs-") && received.jobs !== markerJobs, `sanity runner must override inherited jobs dir, child received ${received.jobs}`);
+    assert(received.state !== received.jobs, "sanity runner must give the suite distinct private state and jobs dirs");
+    assert((await readdir(markerState)).length === 0, "sanity runner must leave the inherited state marker untouched");
+    assert((await readdir(markerJobs)).length === 0, "sanity runner must leave the inherited jobs marker untouched");
+  } finally {
+    await removeDirRobust(fixtureDir);
+  }
 }
 
 // A maintainer tool that falls back to a fixed loopback endpoint drives whichever signed-in browser

@@ -175,6 +175,9 @@ export default function oracleExtension(pi: ExtensionAPI) {
   });
 
   pi.on("before_agent_start", async (event) => {
+    // Newer pi hosts also start custom-message turns (an oracle completion wake-up) through this
+    // event, without a prompt; only a typed /oracle command is dispatched here.
+    if (typeof event.prompt !== "string") return;
     const parsed = parseOracleInput(event.prompt);
     if (!parsed?.args || (parsed.command === "oracle-followup" && !/^\S+\s+\S/.test(parsed.args))) return;
     const template = parsed.command === "oracle" ? oraclePrompt : oracleFollowupPrompt;

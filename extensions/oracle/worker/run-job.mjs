@@ -925,6 +925,7 @@ function buildLoginProbeScript(timeoutMs) {
     let bodyKeys = [];
     let bodyHasId = false;
     let bodyHasEmail = false;
+    let bodyIsAnonymous = false;
     try {
       if (typeof fetch === 'function') {
         const controller = new AbortController();
@@ -942,6 +943,7 @@ function buildLoginProbeScript(timeoutMs) {
             if (data && typeof data === 'object' && !Array.isArray(data)) {
               bodyKeys = Object.keys(data).slice(0, 12);
               bodyHasId = typeof data.id === 'string' && data.id.length > 0;
+              bodyIsAnonymous = typeof data.id === 'string' && data.id.startsWith('ua-');
               bodyHasEmail = typeof data.email === 'string' && data.email.includes('@');
             }
           }
@@ -965,6 +967,7 @@ function buildLoginProbeScript(timeoutMs) {
       bodyKeys,
       bodyHasId,
       bodyHasEmail,
+      bodyIsAnonymous,
     };
   `);
 }
@@ -1212,7 +1215,16 @@ function classifyChatPage({ job, url, snapshot, body, probe }) {
   const onAuthPath = typeof url === "string" && url.includes("/auth/");
   const hasUsableComposer = snapshotHasUsableComposerControls(snapshot);
 
-  const probeHasAccountIdentity = probe?.bodyHasId === true || probe?.bodyHasEmail === true;
+  // /backend-api/me also returns HTTP 200 and an id for anonymous visitors: a ua-* identity
+  // beside login controls is a signed-out page, never an account still resolving.
+  if (probe?.bodyIsAnonymous && (onAuthPath || probe?.onAuthPage || probe?.domLoginCta)) {
+    return {
+      state: "login_required",
+      message: "ChatGPT login is required: the page shows login controls and returned an anonymous visitor session, not a signed-in account. Run /oracle-auth.",
+    };
+  }
+
+  const probeHasAccountIdentity = !probe?.bodyIsAnonymous && (probe?.bodyHasId === true || probe?.bodyHasEmail === true);
 
   // A fresh runtime can see a transient 403 while Cloudflare is still loading.
   // Require explicit authentication evidence before declaring the seed logged out.
