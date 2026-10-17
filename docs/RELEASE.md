@@ -114,6 +114,53 @@ time they were written, not this fork; current support claims live in
 Recorded by the fork under the `omp-oracle` name, on the maintainer's macOS workstation.
 Artifact run ids live under the gitignored `.artifacts/` root.
 
+#### 0.4.4 (2026-10-17, `f69ef0d`)
+
+- Scope: job `086c4b50` of 2026-10-16 against 0.4.3. Code blocks in ChatGPT's current shell lost
+  their language and, on a reloaded page, their fences, and a runnable block's editor rendered as
+  prose; an off-site source pill was activated as a download at completion and again on
+  recollection (all `d276fca`). Response previews cut at 4,000 characters now say so (`c0a2806`);
+  the preset proof runner and the isolated-session recipes drop `--standard`, which Oh My Pi 18.11
+  rejects (`8222ac5`). Merged from upstream `pi-oracle` 0.7.21–0.7.22 (`6111580`): an anonymous
+  `ua-` visitor is `login_required`, `/oracle-auth` verification survives navigation and waits out
+  a closing `agent-browser` daemon, prompt-less `before_agent_start` turns are ignored, plus the
+  upstream test-audit repairs and the `protobufjs` 7.6.6 override. The README and guides were
+  rewritten reader-first, with `npm run test:docs` in the local gate (`7b2e907`, `d739600`).
+- Red before, green after, as recorded in the fix commits: `npm run proof:capture` against the
+  live, reloaded, and editor renders and the off-site pills, plus the production capture against
+  job `086c4b50`'s two saved DOMs (`d276fca`); the auth-flow helper tests for the upstream fixes
+  (`6111580`). `npm run proof:capture` passed again on `6111580`, including its research-widget
+  fixture. No live `/oracle-auth` run and no live Deep Research job; the Deep Research frame
+  capture and export code is unchanged.
+- Live from source before release, through isolated print-mode sessions on the diligence
+  account's managed browser: `instant` `8607fad7` (42 s) and a same-thread follow-up `3ef23f50`
+  (41 s; same conversation, `responseIndex` 1), whose one-block YAML reply was saved as a fenced
+  `yaml` block. `d276fca` records an isolated `instant` job whose YAML and 1-line and 300-line
+  Python blocks were captured identically on completion and on recollection.
+- Live eight-preset ChatGPT proof accepted on `f69ef0d` in one runner invocation through the
+  operator's managed browser, every job recording `packageVersion 0.4.4` and this checkout:
+  `pro_standard` `551b6ae3` 42 s, `pro_extended` `0abc0038` 42 s, `thinking_light` `ec2ca97c`
+  37 s, `thinking_standard` `eb3f11bd` 37 s, `thinking_extended` `2dc6703a` 39 s, `thinking_heavy`
+  `8c8a4c5f` 37 s, `instant` `145cfa78` 37 s, `instant_auto_switch` `ce6f1e4e` 38 s; all eight
+  completed with both markers, and `observedSelection` recorded the stops Pro, Pro, Medium,
+  Medium, High, Extra High, Instant, and Instant.
+- Crabbox lanes on `f69ef0d`: macOS `platform-build` PASS (43.0 s) and `real-extension` PASS
+  (5.4 s), Ubuntu `platform-build` PASS (34.1 s) and `real-extension` PASS (4.5 s);
+  `npm run release:check` passed as one composition on the same clean tree (51 helper tests,
+  4 site tests, 2 documentation-link tests, sanity, and `npm pack --dry-run`).
+- Published `omp-oracle@0.4.4` from `f69ef0d` under the founder's authorization, after
+  `npm login --auth-type=web` (the stored token answered `E401`); both browser approvals completed
+  within their windows. Registry `gitHead` `f69ef0d249dada48670de568b667d7c025f1a389`, shasum
+  `5a48c2041b6026f173a15c86ac2d7fe9380103f2`, 87 files, `latest` (visible within about two
+  minutes). Tag `v0.4.4` and the [GitHub release](https://github.com/alphastorm/omp-oracle/releases/tag/v0.4.4)
+  name the same commit. Installed with `omp plugin uninstall omp-oracle` and
+  `omp plugin install omp-oracle@0.4.4` (dotfiles-private `2e50b59`).
+- Installed package on the operator's real configuration (a fresh print-mode session loading the
+  installed entry point): `pro_standard` job `817c94e4` recorded `packageVersion 0.4.4` and the
+  installed path, completed 55 s after its session started, and moved the slider from
+  `Instant (1 of 5)` to `Pro (5 of 5)`, returning the account's saved tier to `Pro`. Sessions
+  started before the install keep 0.4.3's extension code until restarted.
+
 #### 0.4.3 (2026-10-06, `fb26f35`)
 
 - Scope: the defect report of 2026-10-06 against 0.4.2. A job whose tab another CDP client moved
