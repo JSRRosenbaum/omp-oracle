@@ -91,12 +91,39 @@ export function captureScopedResponse({ responseIndex = 0, messageId, report = f
       return url.href;
     } catch { return undefined; }
   };
+  // ChatGPT marks a reply's file with a `download` attribute or serves it from its own origin
+  // (sandbox:, blob:, /files/, estuary/content) or OpenAI's user-content host. Any other link to
+  // another site is a citation whatever its path or label says: activating one opens a third-party
+  // tab and then waits out the download deadline (a `GitHub +1` source pill on a raw `.md` URL,
+  // observed 2026-10-16).
+  const citationLink = (node) => {
+    if (node.tagName !== 'A' || node.hasAttribute('download')) return false;
+    try {
+      const url = new URL(node.getAttribute('href') || '', doc.baseURI);
+      return /^https?:$/.test(url.protocol) && url.origin !== new URL(doc.baseURI).origin && !/(?:^|\.)oaiusercontent\.com$/i.test(url.hostname);
+    } catch { return false; }
+  };
   const sources = [...root.querySelectorAll('a[href]')].map((node, index) => {
-    const url = safeUrl(node.getAttribute('href'));
-    const artifact = node.hasAttribute('download') || /sandbox:|\/files\/|estuary\/content|blob:/.test(node.getAttribute('href') || '');
+    const href = node.getAttribute('href') || '';
+    const url = safeUrl(href);
+    const artifact = !citationLink(node) && (node.hasAttribute('download') || /sandbox:|\/files\/|estuary\/content|blob:/.test(href));
     return { id: `source-${index + 1}`, kind: artifact ? 'artifact' : 'citation', label: node.textContent || node.getAttribute('aria-label') || '', ...(url ? { url } : { unresolved: true }) };
   });
+  // A runnable block (Python, with a Run button) is a CodeMirror editor: `.cm-content` holds one
+  // `.cm-line` row per line, rendered only near the viewport. Its full text is the editor's own
+  // document, which the page exposes as `cmTile.view` (observed 2026-10-17); the static clone gets
+  // that document back as rows, so the derived Markdown and the saved HTML hold every line.
+  const editorText = (content) => {
+    try {
+      const text = content.cmTile?.view?.state?.doc?.toString();
+      if (typeof text === 'string') return text;
+    } catch {}
+    return [...content.querySelectorAll('.cm-line')].map((line) => line.textContent || '').join('\n');
+  };
   const clone = root.cloneNode(true);
+  const liveEditors = [...root.querySelectorAll('.cm-content')];
+  clone.querySelectorAll('.cm-content').forEach((editor, index) => editor.replaceChildren(...editorText(liveEditors[index]).split('\n')
+    .map((line) => Object.assign(doc.createElement('div'), { className: 'cm-line', textContent: line }))));
   clone.querySelectorAll('script,style,form,input,textarea').forEach((node) => node.remove());
   for (const node of [clone, ...clone.querySelectorAll('*')]) {
     for (const attribute of [...node.attributes]) {
@@ -108,11 +135,33 @@ export function captureScopedResponse({ responseIndex = 0, messageId, report = f
       }
     }
   }
+  // A code block is a `pre` (the earlier shell names its language in a `language-*` class) or the
+  // redesigned shell's `CodeBlock-…` container, whose action bar names it ("YAML") beside the copy
+  // and wrap buttons. A live reply nests a `pre` in that container, a reloaded conversation renders
+  // a bare block `code` (both observed 2026-10-16), and a runnable block holds an editor. The
+  // outermost block wins, so neither a presentation `pre` nor a container's own `pre` is counted
+  // twice.
+  const CODE = 'code, .cm-content';
+  const isCodeContainer = (node) => node.tagName !== 'PRE' && /(?:^|\s)CodeBlock-/.test(node.getAttribute('class') || '') && Boolean(node.querySelector(CODE));
+  const isBlock = (node) => node.tagName === 'PRE' || isCodeContainer(node);
   // A rendered diagram is an SVG inside the code frame: its text is layout, never the diagram source.
-  const isDiagram = (pre) => Boolean(pre.querySelector('svg')) && !pre.querySelector('code');
-  const codeBlocks = [...root.querySelectorAll('pre')].filter((pre) => !pre.querySelector('pre') && !isDiagram(pre)).map((pre, index) => {
-    const code = pre.querySelector('code') || pre;
-    return { index, language: (code.className || '').match(/language-([\w-]+)/)?.[1] || '', text: code.textContent || '' };
+  const isDiagram = (block) => Boolean(block.querySelector('svg')) && !block.querySelector(CODE);
+  const blockCode = (block) => block.querySelector('pre code') || block.querySelector(CODE) || block;
+  const blockText = (code) => code.matches('.cm-content') ? editorText(code) : code.textContent || '';
+  const blockLanguage = (block, code) => {
+    const declared = (code.className || '').match(/language-([\w-]+)/)?.[1];
+    if (declared) return declared;
+    const label = [...block.querySelectorAll('div,span')].find((leaf) => !leaf.firstElementChild && !leaf.contains(code) && !code.contains(leaf)
+      && !leaf.closest('button,[role="button"]') && (leaf.textContent || '').trim())?.textContent?.trim() || '';
+    return /^[A-Za-z][\w+#-]{0,31}$/.test(label) ? label.toLowerCase() : '';
+  };
+  const insideBlock = (node) => {
+    for (let up = node.parentElement; up && root.contains(up); up = up.parentElement) if (isBlock(up)) return true;
+    return false;
+  };
+  const codeBlocks = [...root.querySelectorAll('pre, [class*="CodeBlock-"]')].filter((node) => isBlock(node) && !insideBlock(node) && !isDiagram(node)).map((block, index) => {
+    const code = blockCode(block);
+    return { index, language: blockLanguage(block, code), text: blockText(code) };
   });
   const sourceUrls = new Set(sources.flatMap((source) => source.url ? [source.url] : []));
   const addLiteralSources = (text) => {
@@ -146,15 +195,15 @@ export function captureScopedResponse({ responseIndex = 0, messageId, report = f
         return label ? `[${label}]` : '';
       }
     }
-    if (tag === 'pre') {
+    if (isBlock(node)) {
       if (isDiagram(node)) {
         diagramsWithoutSource += 1;
         return '\n\n_[Diagram not captured: the page shows it as an image without its source.]_\n\n';
       }
-      const code = node.querySelector('code') || node;
-      const text = code.textContent || '';
+      const code = blockCode(node);
+      const text = blockText(code);
       const fence = '`'.repeat(Math.max(3, ...[...text.matchAll(/`+/g)].map((m) => m[0].length + 1)));
-      return `\n\n${fence}${(code.className || '').match(/language-([\w-]+)/)?.[1] || ''}\n${text}${text.endsWith('\n') ? '' : '\n'}${fence}\n\n`;
+      return `\n\n${fence}${blockLanguage(node, code)}\n${text}${text.endsWith('\n') ? '' : '\n'}${fence}\n\n`;
     }
     const body = [...node.childNodes].map(render).join('');
     if (/^h[1-6]$/.test(tag)) return `\n\n${'#'.repeat(Number(tag[1]))} ${body.trim()}\n\n`;
@@ -204,6 +253,7 @@ export function captureScopedResponse({ responseIndex = 0, messageId, report = f
     const label = (node.getAttribute('aria-label') || node.getAttribute('title') || node.textContent || '').trim();
     if (label.length > 200) return [];
     const href = node.getAttribute('href') || '';
+    if (citationLink(node)) return [];
     const namedFile = node.tagName === 'A' && /\.(?:md|txt|csv|tsv|json|pdf|docx|xlsx|pptx|zip|png|jpe?g)(?:$|[?#])/i.test(href)
       && /\.(?:md|txt|csv|tsv|json|pdf|docx|xlsx|pptx|zip|png|jpe?g)\b/i.test(label);
     const structural = node.hasAttribute('download') || /(?:download|export)/i.test(label) || /sandbox:|\/files\/|estuary\/content|blob:/.test(href)

@@ -272,6 +272,42 @@ try {
   assert(!rich.rawHtml.includes('DO_NOT_PERSIST'));
   assert.equal(rich.sources.find((item) => item.label === 'Download').kind, 'artifact');
 
+  // The redesigned shell's code block is a `CodeBlock-…` container whose action bar names the
+  // language beside its buttons; a live reply nests a `pre`, a reloaded conversation a bare block
+  // `code` (observed 2026-10-16). Each variant captures fenced blocks in the named language, the
+  // label is not prose, and a source pill or export-named link to another site is a citation,
+  // never a download (activating one opened a third-party tab and spent the download deadline).
+  const yaml = 'schema_version: synthetic.v1\ntasks:\n  - id: one\n';
+  const notes = '# Plan\n\n- one\n';
+  const codeShell = (label, inner) => `<div class="relative CodeSurface-a1 CodeBlock-b2 @container"><div class="flex ActionBar-c3"><svg></svg><div class="truncate">${label}</div><div class="ms-auto"><div role="presentation"><span class="contents"><button aria-label="Enable word wrap"><svg></svg></button></span><span class="contents"><button aria-label="Copy code"><svg></svg></button></span></div></div></div>${inner}</div>`;
+  const liveCode = (label, text) => codeShell(label, `<div class="relative"><div class="InlineCodePane-d4"><div class="Viewer-e5"><div class="chatgpt-code-scrollport"><pre class="m-0"><code><span>${text}</span></code></pre></div></div></div></div>`);
+  const reloadedCode = (label, text) => codeShell(label, `<div class="overflow-auto"><code class="whitespace-pre! block CodeContent-f6"><span>${text}</span></code></div>`);
+  const citations = '<a href="https://raw.githubusercontent.com/example/repo/main/docs/API.md" aria-label="GitHub, https://raw.githubusercontent.com/example/repo/main/docs/API.md, 1 additional source">GitHub +1</a> <a href="https://example.invalid/files/export-controls.pdf">Export controls guide.pdf</a>';
+  for (const [variant, block] of [['live', liveCode], ['reloaded', reloadedCode]]) {
+    await evaluate(`document.body.innerHTML=${JSON.stringify(`<article data-message-author-role="assistant" data-message-id="code-${variant}"><p>Plan, per ${citations}.</p>${block('YAML', yaml)}${block('Markdown', notes)}<a href="${origin}/files/plan.yaml" download="plan.yaml">plan.yaml</a></article>`)}`);
+    const turn = await evaluate(captureExpression({ responseIndex: 0, messageId: `code-${variant}` }));
+    assert.deepEqual(turn.codeBlocks.map(({ language, text }) => ({ language, text })), [{ language: 'yaml', text: yaml }, { language: 'markdown', text: notes }], `${variant}: one block per container, in its action bar's language`);
+    assert(turn.markdown.includes('```yaml\n' + yaml + '```'), `${variant}: the fence keeps the language`);
+    assert(!/^(?:YAML|Markdown)$/m.test(turn.markdown), `${variant}: the action bar label is not prose`);
+    assert.deepEqual(turn.candidates.map((candidate) => candidate.label), ['plan.yaml'], `${variant}: a link to another site is never a download`);
+    assert.deepEqual(turn.sources.filter((source) => source.kind === 'artifact').map((source) => source.label), ['plan.yaml']);
+  }
+
+  // A runnable block (Python, with a Run button) is a CodeMirror editor that renders only the rows
+  // near the viewport (observed 2026-10-17): its text is the editor's own document, the saved HTML
+  // and the fence hold every line, and without that document the rendered rows join one per line.
+  const script = 'import sys\n\nprint("smoke ok")\nsys.exit(0)';
+  const editorRows = (rows) => rows.map((row) => `<div class="cm-line">${row || '<br>'}</div>`).join('');
+  const runnable = (rows) => `<div class="relative CodeSurface-a1 CodeBlock-b2 @container"><div class="flex ActionBar-c3"><svg></svg><div class="truncate">Python</div><div class="ms-auto"><span class="contents"><button aria-label="Copy code"><svg></svg></button></span><button aria-label="Run code"><svg></svg>Run</button></div></div><div class="InlineCodePane-d4"><div class="cm-editor"><div class="cm-announced"></div><div class="cm-scroller"><div class="cm-content" role="textbox" aria-label="Edit code">${editorRows(rows)}</div></div></div></div></div>`;
+  await evaluate(`document.body.innerHTML=${JSON.stringify(`<article data-message-author-role="assistant" data-message-id="runnable"><p>Script:</p>${runnable(script.split('\n').slice(0, 2))}</article>`)};document.querySelector('.cm-content').cmTile={view:{state:{doc:{toString:()=>${JSON.stringify(script)}}}}};`);
+  const editorTurn = await evaluate(captureExpression({ responseIndex: 0, messageId: 'runnable' }));
+  assert.deepEqual(editorTurn.codeBlocks.map(({ language, text }) => ({ language, text })), [{ language: 'python', text: script }], 'an editor block reads its whole document, not the rendered rows');
+  assert(editorTurn.markdown.includes('```python\n' + script + '\n```'), 'the fence holds every line of the editor document');
+  assert(editorTurn.rawHtml.includes('sys.exit(0)'), 'the saved HTML holds the rows the editor did not render');
+  assert(!/^(?:Python|Run)$/m.test(editorTurn.markdown), 'neither the label nor the Run button is prose');
+  await evaluate(`const editor=document.querySelector('.cm-content');delete editor.cmTile;editor.innerHTML=${JSON.stringify(editorRows(script.split('\n')))};`);
+  assert.equal((await evaluate(captureExpression({ responseIndex: 0, messageId: 'runnable' }))).codeBlocks[0].text, script, 'without the document, the rendered rows join one per line');
+
   // A sandboxed cross-origin report frame delegates its export to the host page (Chrome forbids
   // downloads from sandboxed frames). The pre-armed native download collector must recover the
   // exact bytes Chrome saved, bound to the tab's main frame, while the frame realm sees nothing.

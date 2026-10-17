@@ -344,7 +344,7 @@ ${PI_ORACLE_JOBS_DIR:-/tmp}/oracle-<job-id>/
   response.capture.json      # turn binding, capture method, fidelity, citations, code blocks, gaps, artifact summary
   response.raw.txt           # bound-turn innerText evidence
   response.raw.html          # bound-turn sanitized DOM (active content, transient attributes, signed URLs stripped)
-  response.block-<n>.txt     # exact text of each leaf code block in the bound turn
+  response.block-<n>.txt     # exact text of each code block in the bound turn
   artifacts.json             # discovered, downloaded, validated, and failed artifact records
   artifacts/
     <sha256>-<file name>     # validated downloads only
@@ -438,10 +438,14 @@ ambiguous identity fails closed: for ChatGPT, streamed intermediate text is neve
 
 `extensions/oracle/worker/response-capture.mjs` contains closure-free browser functions evaluated in the owned page or bound
 report frame (and tested directly by the synthetic Chromium harness). From the bound root it extracts raw text, sanitized
-HTML, derived Markdown, leaf `pre` code blocks (nested presentation wrappers are not double-counted; language classes may be
-absent), stable source URLs (signed transport URLs are dropped; literal URLs in text and code are inventoried), structural
-artifact candidates, child frames, and the reasoning-time label (`Worked for ...` in the exchange's activity header or
-`Research completed in ...`). A turn consisting of a single `markdown` code block is saved verbatim (`exact_code`); otherwise
+HTML, derived Markdown, code blocks, stable source URLs (signed transport URLs are dropped; literal URLs in text and code are
+inventoried), structural artifact candidates, child frames, and the reasoning-time label (`Worked for ...` in the exchange's
+activity header or `Research completed in ...`). A code block is a `pre` or the current shell's `CodeBlock-…` container (a
+live reply nests a `pre` in it, a reloaded conversation renders a bare block `code`, and a runnable block such as Python
+holds a CodeMirror editor); its language comes from a `language-*` class or, failing that, the container's action-bar label
+(`YAML` becomes a `yaml` fence), the label never becomes prose, and nested wrappers are not double-counted. The editor
+renders only the rows near the viewport, so an editor block's text is the editor's own document, written back into the
+sanitized HTML as rows. A turn consisting of a single `markdown` code block is saved verbatim (`exact_code`); otherwise
 derived Markdown is written (`derived_markdown`). Exact payload files and the surrounding derived response are distinct
 fidelity claims.
 
@@ -467,9 +471,11 @@ and unresolved counts under `citations`.
 
 Artifact candidates are discovered only inside the bound turn or bound report frame from elements with `download` attributes,
 file-like `href`s, or export labels (container elements that wrap other controls or exceed 200 characters of text are excluded
-so the research widget wrapper never masks its own `Export` button). Visible labels are display metadata, never authoritative
-filenames. Each candidate is tracked in `artifacts.json` (`discovered`, `downloaded`, `validated`, `failed`), verified against
-its declared size and format (PDF, ZIP, PNG, UTF-8 text), and stored once under `artifacts/<sha256>-<name>`.
+so the research widget wrapper never masks its own `Export` button). A link to another site without a `download` attribute is
+a citation, never a candidate, whatever its path or label: ChatGPT serves a reply's files from its own origin or OpenAI's
+user-content host. Visible labels are display metadata, never authoritative filenames. Each candidate is tracked in
+`artifacts.json` (`discovered`, `downloaded`, `validated`, `failed`), verified against its declared size and format (PDF,
+ZIP, PNG, UTF-8 text), and stored once under `artifacts/<sha256>-<name>`.
 
 Standard turn artifacts are captured in-realm by activating the control under temporary `fetch`, `window.open`, and anchor
 hooks, falling back to `agent-browser download <ref> <dest>`. For Deep Research native Markdown export, the sandboxed iframe's
