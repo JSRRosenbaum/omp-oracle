@@ -503,7 +503,7 @@ omp plugin uninstall pi-oracle
 pi remove npm:pi-oracle
 ```
 
-- **Published npm release (`0.4.3`):**
+- **Published npm release (`0.4.4`):**
   ```bash
   omp install omp-oracle
   pi install npm:omp-oracle
