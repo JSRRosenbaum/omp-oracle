@@ -36,8 +36,8 @@ session that asked gets one wake-up when it lands.
 [license]: LICENSE
 [license-badge]: https://img.shields.io/github/license/alphastorm/omp-oracle?color=1C232B&labelColor=0B0E11
 
-<sub><strong>Private by design:</strong> isolated browser profile · your real Chrome untouched by default ·
-secrets excluded from archives by default · results stay on disk · no telemetry</sub>
+<sub><strong>Private by design:</strong> isolated browser profile · real Chrome untouched by default ·
+secrets excluded by default · results stay on disk · no telemetry</sub>
 
 </div>
 
@@ -45,14 +45,15 @@ secrets excluded from archives by default · results stay on disk · no telemetr
 > Commands, tools, config, and saved jobs carry over; remove `pi-oracle` before installing `omp-oracle` ([Build and run](#build-and-run)).
 > See [Upstream](docs/UPSTREAM.md) and [Compatibility](docs/COMPATIBILITY.md).
 
-OMP Oracle is a local-first companion for Oh My Pi and `pi`: the host agent keeps control of context selection and safety checks while the selected web provider runs the slow second-opinion job in the background against your subscription. Status: experimental public beta. Pi `0.80.9+` is the suggested tested floor for project-trust-aware package/runtime validation, but pi-bundled runtime packages remain optional wildcard peers so npm peer ranges do not block newer host releases.
+OMP Oracle is a local-first companion for Oh My Pi and `pi`: the host agent keeps control of context selection and safety checks, and ChatGPT or Grok does the slow second-opinion work in the background on your own subscription. Status: experimental public beta; the exact support boundary is in [Compatibility](docs/COMPATIBILITY.md).
 
 This is a community project and is not affiliated with or endorsed by the Oh My Pi maintainers, OpenAI, or xAI.
 
 ## What a successful run looks like
 
 ```text
-You: /oracle Review the pending changes. Include the whole repo unless a narrower archive is clearly better.
+You: /oracle Review the pending changes.
+     Include the whole repo unless a narrower archive is clearly better.
 
 omp-oracle:
   1. preflights local session/auth readiness
@@ -118,7 +119,11 @@ To drive an already signed-in Chrome instead of copying cookies, set the agent-l
 To use a separate work account without changing personal Chrome, configure a [managed ChatGPT browser](docs/OPERATIONS.md#managed-chatgpt-browser-dedicated-account) so `/oracle-auth` opens sign-in there and Oracle starts and quits that Chrome around jobs:
 
 ```json
-{ "browser": { "chatGptManagedProfileDir": "~/Library/Application Support/omp-oracle/chatgpt-profile" } }
+{
+  "browser": {
+    "chatGptManagedProfileDir": "~/Library/Application Support/omp-oracle/chatgpt-profile"
+  }
+}
 ```
 
 To keep a dedicated Chrome running yourself over native CDP instead, see [Dedicated account in persistent Chrome](docs/OPERATIONS.md#dedicated-account-in-persistent-chrome).
@@ -126,7 +131,7 @@ To keep a dedicated Chrome running yourself over native CDP instead, see [Dedica
 ### 4. Submit a tiny job
 
 ```text
-/oracle Read README.md and package.json. Tell me in five bullets what this package does and who should not use it.
+/oracle Read README.md and package.json. In five bullets, what does this package do?
 ```
 
 Expected result:
@@ -145,15 +150,15 @@ If the wake-up does not arrive:
 
 ## Commands and tools
 
-| Command | Purpose |
-| --- | --- |
-| `/oracle <request>` | Prepare context and dispatch a ChatGPT or Grok web oracle job (starts a fresh thread unless a ChatGPT conversation id or URL is given). |
-| `/oracle-followup <job-id> <request>` | Continue an earlier oracle job in the same provider thread. |
-| `/oracle-auth [chatgpt|grok]` | Sync provider cookies into the isolated auth seed profile, or open ChatGPT sign-in in the managed browser (refused in relay mode). |
-| `/oracle-read [job-id]` | Inspect job status and the saved response preview. |
-| `/oracle-status [job-id]` | Inspect a job, or list recent job ids when no explicit id is given. |
-| `/oracle-cancel <job-id>` | Cancel a queued or active job. |
-| `/oracle-clean <job-id|all>` | Remove temp files for terminal jobs; recently woken terminal jobs may stay retained briefly, and a blocked cleanup returns the next eligible cleanup time. |
+User-facing commands:
+
+- `/oracle <request>` — prepare context and dispatch a ChatGPT or Grok web oracle job. It starts a fresh thread unless the request names an existing ChatGPT conversation id or URL.
+- `/oracle-followup <job-id> <request>` — continue an earlier oracle job in the same provider thread.
+- `/oracle-auth [chatgpt|grok]` — sync provider cookies into the isolated auth seed profile, or open ChatGPT sign-in in the managed browser (refused in relay mode).
+- `/oracle-read [job-id]` — inspect job status and the saved response preview.
+- `/oracle-status [job-id]` — inspect a job, or list recent job ids when no explicit id is given.
+- `/oracle-cancel <job-id>` — cancel a queued or active job.
+- `/oracle-clean <job-id|all>` — remove temp files for terminal jobs; recently woken terminal jobs may stay retained briefly, and a blocked cleanup returns the next eligible cleanup time.
 
 Agent-facing tools:
 
@@ -165,32 +170,24 @@ Agent-facing tools:
 
 ### Example requests
 
-```text
-/oracle Review the current pending changes. Include the whole repo unless a narrower archive is clearly better. Give me a prioritized code review with concrete fixes.
-
-/oracle Read the codebase and explain the highest-risk auth/session failure modes, including what to test before shipping.
-
-/oracle Explain the README guidance for /oracle-clean retention grace. Archive README.md plus any nearby docs or implementation files that help answer accurately.
-
-/oracle-followup <job-id> Tighten the migration plan around rollback risk, and include the most relevant surrounding files/docs as long as the archive stays comfortably within the 250 MiB limit.
-
-/oracle Continue existing ChatGPT conversation 6a28ab5c-e4d4-83e8-b8be-dd39f38a26d6. Review the current auth code and include enough surrounding context to propose concrete fixes.
-```
+- `/oracle Review the current pending changes. Include the whole repo unless a narrower archive is clearly better. Give me a prioritized code review with concrete fixes.`
+- `/oracle Read the codebase and explain the highest-risk auth/session failure modes, including what to test before shipping.`
+- `/oracle Explain the README guidance for /oracle-clean retention grace. Archive README.md plus any nearby docs or implementation files that help answer accurately.`
+- `/oracle-followup <job-id> Tighten the migration plan around rollback risk, and include the most relevant surrounding files/docs as long as the archive stays comfortably within the 250 MiB limit.`
+- `/oracle Continue existing ChatGPT conversation 6a28ab5c-e4d4-83e8-b8be-dd39f38a26d6. Review the current auth code and include enough surrounding context to propose concrete fixes.`
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    A["/oracle request"] --> B["Agent preflights, then gathers a context-rich relevant repo slice"]
-    B --> C["Agent chooses context-rich archive inputs"]
-    C --> D["oracle_submit builds provider-specific archive"]
-    D --> E["Detached worker clones isolated auth seed profile (or pins a relay tab)"]
-    E --> F["Selected provider receives archive + prompt"]
-    F --> G["Response/artifacts saved under oracle job dir"]
-    G --> H["Best-effort wake-up to matching session"]
+    A["/oracle:<br/>agent preflights,<br/>packs context"] --> B["oracle_submit:<br/>archive +<br/>detached worker"]
+    B --> C["Worker: isolated<br/>browser or<br/>pinned tab"]
+    C --> D["ChatGPT<br/>or Grok"]
+    D --> E["Response saved<br/>in the job dir"]
+    E --> F["One wake-up<br/>to the session"]
 ```
 
-- **The host agent owns context gathering.** `/oracle` and `/oracle-followup` keep the visible transcript compact while hidden dispatch instructions guide the agent through preflight, context gathering, and archive input selection.
+- **Agent preflights, then gathers a context-rich relevant repo slice.** `/oracle` and `/oracle-followup` keep the visible transcript compact while hidden dispatch instructions guide the agent through preflight, context gathering, and archive input selection.
 - **Tools own execution.** `oracle_submit` builds the archive, admits or queues the job, starts a detached worker, and returns immediately.
 - **Three auth transports are supported.** Jobs clone the isolated auth seed profile from `/oracle-auth` by default, or drive one job-owned pinned tab in your signed-in Chrome via the relay or in a dedicated managed browser.
 - **Follow-ups and existing threads are explicit.** Normal `/oracle` jobs still start a fresh provider thread, while `/oracle-followup` continues a prior job with `followUpJobId` and explicit browser conversation ids or URLs pass `chatGptConversationId`.
@@ -200,23 +197,27 @@ Full detail: [Architecture](docs/ARCHITECTURE.md) · [Security model](docs/SECUR
 
 ## Configuration
 
-Most users can start with defaults (`chatgpt`, `pro_extended`, Grok `heavy`). Set agent-level or project config only to override defaults, browser profiles, or transports:
+Most users can start with the defaults: ChatGPT, the `pro_extended` preset, Grok `heavy`. Set agent-level or project config only to change a default, a browser profile, or a transport:
 
-| Host | Agent-level config | Project overrides (`defaults`, `worker`, `poller`, `artifacts`, `cleanup` only) |
+| Host | Agent-level config | Project overrides |
 | --- | --- | --- |
 | Oh My Pi | `~/.omp/agent/extensions/oracle.json` | `.omp/extensions/oracle.json` |
 | `pi` | `~/.pi/agent/extensions/oracle.json` | `.pi/extensions/oracle.json` |
 
 ```json
 {
-  "defaults": { "provider": "chatgpt", "preset": "<preset id from ORACLE_SUBMIT_PRESETS>", "grokMode": "heavy" },
+  "defaults": {
+    "provider": "chatgpt",
+    "preset": "<preset id from ORACLE_SUBMIT_PRESETS>",
+    "grokMode": "heavy"
+  },
   "auth": { "chromeProfile": "Default" }
 }
 ```
 
 - `defaults.provider` is `chatgpt` or `grok`; `defaults.preset` is the default ChatGPT preset and `defaults.grokMode` the Grok mode (`heavy` is the only mode). Canonical ids live in [`extensions/oracle/lib/config.ts`](extensions/oracle/lib/config.ts).
 - When an agent is unsure which preset fits, it should omit `preset` and use the configured default model instead of asking; if the prompt asks for Grok, it passes `provider: "grok"`.
-- Project config loads by default and is ignored when you opt out with `--no-approve` or save a "do not trust" decision; `browser` and `auth` are agent-level only.
+- A project file may set only `defaults`, `worker`, `poller`, `artifacts`, and `cleanup`; `browser` and `auth` are agent-level only. Project config loads by default and is ignored when you opt out with `--no-approve` or save a "do not trust" decision.
 - Linux cookie import uses Sweet Cookie's keyring options (`SWEET_COOKIE_LINUX_KEYRING` and safe-storage password overrides), so leave `auth.chromiumKeychain` unset there; macOS users of another Chromium-family browser pair `auth.chromeCookiePath` with `auth.chromiumKeychain`.
 
 Full key reference, cookie sources, environment variables, and retention: [Operations → Configuration reference](docs/OPERATIONS.md#configuration-reference).
@@ -244,7 +245,13 @@ For ChatGPT, `oracle_submit` accepts canonical preset ids or a matching human-re
 
 ### Deep Research
 
-`deep_research` is a composer-tool preset, not a model tier: it enables **Deep research** from the ChatGPT composer tools menu rather than changing the model picker. It requires a shared Chrome transport (the existing-Chrome relay or the managed browser) and fails on the isolated seed profile. Runs take minutes, hold the job's pinned tab for the whole run (90-minute default completion timeout), and consume a Deep Research task on your account, so `deep_research` is excluded from the release preset proof. The report is saved as Markdown, from the native export when it can be collected and otherwise from the research widget itself; use `oracle_read({ jobId, action: "recollect" })` to retry collection rather than resubmitting. For the three `deep_research_*` failure codes, see [Operations → Troubleshooting](docs/OPERATIONS.md#troubleshooting); for frame capture and export collection internals, see [Architecture → Collection](docs/ARCHITECTURE.md#collection).
+`deep_research` is a composer-tool preset, not a model tier: the worker enables **Deep research** in the ChatGPT composer tools menu and leaves the model picker alone.
+
+- It needs a shared Chrome transport (the existing-Chrome relay or the managed browser) and fails on the isolated seed profile.
+- A run takes minutes, holds the job's pinned tab for the whole run (90-minute default completion timeout), and consumes a Deep Research task on your account, so `deep_research` is excluded from the release preset proof.
+- The report is saved as Markdown: from the native export when it can be collected, otherwise from the research widget itself. Use `oracle_read({ jobId, action: "recollect" })` to retry collection rather than resubmitting.
+
+The three `deep_research_*` failure codes and what to do about them: [Operations → Troubleshooting](docs/OPERATIONS.md#troubleshooting). Frame capture and export collection internals: [Architecture → Collection](docs/ARCHITECTURE.md#collection).
 
 ## Privacy and security
 
@@ -258,7 +265,14 @@ See the [Security model](docs/SECURITY.md) and the [Security policy](SECURITY.md
 
 ## Compatibility
 
-- **Hosts:** Oh My Pi and `pi` (`0.80.9` baseline). **Platforms:** macOS and Linux pass the release gate; Windows native is declared and validated upstream, not re-qualified by this fork. **Providers:** ChatGPT (nine presets) and Grok (`heavy`). **Transports:** isolated seed profile for both providers; existing-Chrome relay and managed browser for ChatGPT. **Package:** `omp-oracle` `0.4.3` on npm; the GitHub URL tracks `main`.
+| | Current contract |
+| --- | --- |
+| Hosts | Oh My Pi and `pi`. Pi `0.80.9+` is the suggested tested floor; the `pi` runtime packages are optional wildcard peers, so npm does not block newer hosts |
+| Platforms | macOS and Linux pass the release gate; Windows native is declared and validated upstream, not re-qualified by this fork |
+| Providers | ChatGPT (nine presets) and Grok (`heavy`) |
+| Transports | Isolated seed profile for both providers; existing-Chrome relay and managed browser for ChatGPT |
+| Package | `omp-oracle` `0.4.3` on npm; the GitHub URL tracks `main` |
+
 - **Experimental public beta:** provider UI, auth, model controls, and artifact download behavior can drift.
 - **Wake-up is best effort:** the session poller delivers one idle-gated wake-up per finished job, while the job directory on disk is the durable record.
 
