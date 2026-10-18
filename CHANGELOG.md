@@ -4,7 +4,7 @@ Versions from `0.1.0` are `omp-oracle` releases; the numbering restarts for the 
 identity and does not continue upstream `pi-oracle`'s `0.7.x` line. The inherited upstream
 history is kept below the divider.
 
-## Unreleased
+## 0.4.5 - 2026-10-18
 
 ### Added
 - `oracle_read` accepts an optional owning `projectId`; `/oracle-status` and `/oracle-read` accept `--projectId`. An id found in another project names the owning root and requires an explicit retry instead of hiding the job or returning its response silently. Every project's jobs share the configured jobs root, so lookup needs no new index; cancel and cleanup remain current-project only.
