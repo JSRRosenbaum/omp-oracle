@@ -33,6 +33,7 @@ import { isTrackedProcessAlive, readProcessStartedAt, spawnDetachedNodeProcess, 
 import { sharedBrowserCleanupFields, type ManagedBrowserRecord } from "../shared/managed-browser-helpers.mjs";
 import type { OracleConfig, OracleResolvedSelection } from "./config.js";
 import { getOracleJobsDir } from "../shared/state-path-helpers.mjs";
+import type { OracleObservedSelection } from "../shared/job-observability-helpers.mjs";
 import { parseTimestamp } from "../shared/time-helpers.mjs";
 import { resolveOracleProviderArchivePlan } from "./provider-capabilities.js";
 import { withJobLock, withLock } from "./locks.js";
@@ -190,7 +191,7 @@ export interface OracleJob {
   recollectionError?: string;
   recollectionNeeded?: boolean;
   promptSendState?: "not_sent" | "attempted" | "accepted";
-  observedSelection?: { at: string; modelLabel?: string; effortLabel?: string; deepResearchVerified?: boolean };
+  observedSelection?: OracleObservedSelection;
   observedTurn?: { at: string; durationLabel?: string; durationSeconds?: number };
   recollectionPriorWorker?: { runtimeSessionName?: string; workerPid?: number; workerStartedAt?: string; cleanupPending?: boolean; cleanupWarnings?: string[] };
   error?: string;
@@ -268,11 +269,28 @@ export function readJob(jobDirOrId: string): OracleJob | undefined {
 }
 
 export function listJobsForCwd(cwd: string): OracleJob[] {
-  const projectId = getProjectId(cwd);
+  return listJobsForProject(getProjectId(cwd));
+}
+
+export function listJobsForProject(projectId: string): OracleJob[] {
   return listOracleJobDirs()
     .map((dir) => readJob(dir))
     .filter((job): job is OracleJob => Boolean(job && job.projectId === projectId))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export class OracleJobProjectMismatchError extends Error {
+  constructor(public readonly jobId: string, public readonly projectId: string) {
+    super(`Oracle job ${jobId} belongs to project ${JSON.stringify(projectId)}. Pass projectId: ${JSON.stringify(projectId)} to oracle_read, or use /oracle-status ${jobId} --projectId ${JSON.stringify(projectId)}.`);
+  }
+}
+
+/** Every project's jobs share one jobs root, so an id is found directly; only its owning projectId authorizes the read. */
+export function readJobForProject(jobId: string, projectId: string): OracleJob {
+  const job = readJob(jobId);
+  if (job?.id !== jobId) throw new Error(`Oracle job not found in this project: ${jobId}`);
+  if (job.projectId !== projectId) throw new OracleJobProjectMismatchError(jobId, job.projectId);
+  return job;
 }
 
 async function writeJobUnlocked(job: OracleJob): Promise<void> {
