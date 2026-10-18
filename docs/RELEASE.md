@@ -114,6 +114,64 @@ time they were written, not this fork; current support claims live in
 Recorded by the fork under the `omp-oracle` name, on the maintainer's macOS workstation.
 Artifact run ids live under the gitignored `.artifacts/` root.
 
+#### 0.4.5 (2026-10-18, `a80242d`)
+
+- Scope: #1 (`5080f48`). `oracle_read`, `/oracle-status`, and `/oracle-read` find another project's
+  job by id and return it only with its owning `projectId`. `observedSelection` records the
+  observed `product` and the bound frame's `deepResearchIframeTitle`. A slider reading logged
+  before configuration failed is kept. Review fixes before merge: a research frame whose capture
+  marker no longer resolves still binds by `src`, and lookup reads the id directly instead of
+  scanning every job directory. #2 (`82ee037`) reopens a thinking-effort picker that ChatGPT
+  closes mid-step: live `instant` job `73dd8cc5` read `Pro (5 of 5)`, and one ArrowLeft later
+  the picker was closed on `High` behind a pill named only `Select ChatGPT model`. That job still
+  saved `observedSelection` `Pro (5 of 5)`/`pro` on failure.
+- Red before, green after, as recorded in the pull requests: the cross-project regression failed
+  on `9a3eae0` because the error did not name the owner or the `projectId` retry; the frame
+  assertion failed on #1's first commit `3bf85ea` with `The bound report frame is absent or
+  ambiguous.` (pass 1, fail 2); the picker regression, which replays `73dd8cc5`'s closed composer,
+  failed on the previous worker with `Lost the ChatGPT thinking-effort slider while stepping`
+  (pass 1, fail 2). All three pass on the release tree.
+- Live from source before release, through isolated print-mode sessions on the diligence
+  account's managed browser. On #1's branch with its review fixes (committed afterwards as
+  `249c010`): `instant` `7ac74993` completed (`High (3 of 5)` to `Instant (1 of 5)`, `product`
+  `instant`). A second session in another cwd was refused with the owning root named, retried
+  with that `projectId`, and read the saved answer. On the working tree committed afterwards as
+  `1d85b66` (identical to `82ee037`; its jobs record `gitHead` `5080f48`, its base):
+  `pro_standard` `0cd95d8b` (Instant to Pro); `instant`
+  `032b6b6b` (Pro to Instant; the picker stayed open, so the reopen path is fixture-proven only);
+  a same-thread `thinking_light` follow-up `08a7eb91` (`responseIndex` 1, fenced `yaml` reply);
+  and `deep_research` `3e630a73` (1 min 45 s), whose widget frame attached 21 s after send. Its
+  report was read from the widget, its 956-byte native Markdown export was collected
+  (`complete`), and `observedSelection` recorded `deepResearchIframeTitle` `Deep research`, the
+  first live observation of that title.
+- Live eight-preset ChatGPT proof accepted on `a80242d` in one runner invocation (314 s) through
+  the operator's managed browser, every job recording `packageVersion 0.4.5` and this checkout:
+  `pro_standard` `578200a6` 48 s, `pro_extended` `b40beb5c` 37 s, `thinking_light` `27f73947`
+  37 s, `thinking_standard` `d10f0b60` 37 s, `thinking_extended` `6cbdcaa7` 37 s, `thinking_heavy`
+  `32cfa9c4` 39 s, `instant` `bd0fc88b` 39 s, `instant_auto_switch` `b1bca34f` 37 s. All eight
+  completed with both markers. `observedSelection` recorded the stops Pro, Pro, Medium, Medium,
+  High, Extra High, Instant, and Instant, with products `pro`, `pro`, four `thinking`, and two
+  `instant`. No picker reopen fired, including on `pro_extended` to `thinking_light`.
+- Crabbox lanes on `a80242d`: macOS `platform-build` PASS (42.6 s) and `real-extension` PASS
+  (5.1 s), Ubuntu `platform-build` PASS (34.4 s) and `real-extension` PASS (4.2 s);
+  `npm run release:check` passed as one composition on the same clean tree (54 helper tests,
+  4 site tests, 2 documentation-link tests, sanity, and `npm pack --dry-run`).
+- Published `omp-oracle@0.4.5` from `a80242d` under the founder's authorization, after
+  `npm login --auth-type=web` (the stored token answered `E401`); both browser approvals completed
+  within their windows. Registry `gitHead` `a80242d8266086348fa2ae280776e8507e3ff733`, shasum
+  `219026e1843a82afaae4ed16e3a797f9900664db`, 87 files, `latest` (visible within about 90
+  seconds). Tag `v0.4.5` and the [GitHub release](https://github.com/alphastorm/omp-oracle/releases/tag/v0.4.5)
+  name the same commit. Installed with `omp plugin uninstall omp-oracle` and
+  `omp plugin install omp-oracle@0.4.5` (dotfiles-private `0edd64c`).
+- Installed package on the operator's real configuration (a fresh print-mode session loading the
+  installed entry point): `pro_standard` job `a7ea581b` recorded `packageVersion 0.4.5` and the
+  installed path, completed 37 s after creation, and moved the slider from `Instant (1 of 5)` to
+  `Pro (5 of 5)`, returning the account's saved tier to `Pro`. Sessions started before the
+  install keep 0.4.4's extension code until restarted.
+- Not exercised: a live `/oracle-auth` run, the picker reopen path against the live page, and
+  the cross-project `/oracle-status` and `/oracle-read` commands outside the native test (the live
+  check used `oracle_read`).
+
 #### 0.4.4 (2026-10-17, `f69ef0d`)
 
 - Scope: job `086c4b50` of 2026-10-16 against 0.4.3. Code blocks in ChatGPT's current shell lost
