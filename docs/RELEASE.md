@@ -114,6 +114,79 @@ time they were written, not this fork; current support claims live in
 Recorded by the fork under the `omp-oracle` name, on the maintainer's macOS workstation.
 Artifact run ids live under the gitignored `.artifacts/` root.
 
+#### 0.4.6 (2026-10-19, `00059ad`)
+
+- Scope: the workstation's `agent-browser` moved from 0.35.0 to 0.39.1 (global npm install,
+  2026-10-19). #3 (`672aa13`): `/oracle-auth` relaunches only after the driver stops listing the
+  previous auth session (the job-teardown rule, now shared as `closeAgentBrowserSession`), both
+  workers run the driver with `AGENT_BROWSER_NO_WEBMCP=1`, and the Ubuntu smoke image installs
+  0.39.1. #4 (`1e15780`): submit replies name `oracle_read` with the job id for a status check the
+  user asks for. #5 (`aeb730f`): completion counts only rendered stop controls.
+- Driver comparison before the upgrade, 0.35.0 against 0.39.1 on every command shape the workers
+  send (isolated attach, pinned CDP tab, auth launch), each version under its own `HOME` and
+  socket directory: identical exit codes, parsed snapshot entries, eval results, pinned-tab JSON
+  (`tab close`, `tab_gone`, `Cannot close the last tab`), and session inventory format.
+  Two differences: an auth relaunch issued right after `close` succeeded 9 of 10 times on 0.35.0
+  and 0 of 10 on 0.39.1 (`Invalid response: EOF … it may or may not have run, so it was not
+  retried`), and 0.39.1 appended a WebMCP announcement to `eval`, `get url`, `snapshot -i`, and
+  `get text` output when a page registered tools late (4 of 4; 0 of 4 with
+  `AGENT_BROWSER_NO_WEBMCP=1`). With that variable set, a 0.39.1 launch command that opens a URL
+  directly lands on `about:blank`; Oracle launches on `about:blank` and then opens. Signed-out
+  grok.com registered no WebMCP tools; chatgpt.com served the headless probe a Cloudflare challenge.
+- Red before, green after, as recorded in the pull requests: #3's sanity test runs
+  `auth-bootstrap.mjs` from a live auth session against a fake driver that models the closing
+  daemon and WebMCP output. It failed on the previous worker with the launch EOF, failed with only
+  the teardown wait (the probe read as text and verification timed out), and passes with both.
+  With the real 0.39.1 driver and a loopback page, the previous worker exited 1 and left the
+  session listed, and the fixed one exited 0 and committed the seed. #5's capture-proof replay of
+  the retained hidden workspace timed out on `672aa13` and passes on the fix, where a rendered
+  offscreen `Stop` still holds partial-text, empty-thinking, and Deep Research waits.
+- Live from source before release, through isolated print-mode sessions on clones of the
+  diligence account's managed profile. From the working tree committed afterwards as `7b91712`
+  (#3): `instant` `72a0c013` and `8c88f752` on 0.39.1 and `143bd39b` on 0.35.0 completed with
+  warning-free cleanup, no driver session left, and the keeper's idle quit, each only after the
+  121 s stale-stop reload. Diagnosis of that wait: `8df0d1e1` (`--disable-sync`,
+  `navigator.webdriver` true, 151 s) and `3b9a5df9` (the operator's browser arguments,
+  `navigator.webdriver` false, 152 s). Over CDP, the only `Stop` match was a 0×0 button in
+  ChatGPT's Home composer, kept mounted in a `display:none` workspace (`Workspace-IfYAxV`) after
+  the send, while the visible reply showed Copy, Rate response, and Regenerate response; the page
+  was visible and focused (about 120 animation frames per second), and focus emulation did not
+  clear the control. On the fixed tree (committed afterwards as `aeb6a04`, merged as #5; its jobs
+  record `gitHead` `672aa13`): `instant` `d99127ff` completed 23.8 s after send and its
+  same-thread follow-up `614df619` 24.6 s after send (same conversation, `responseIndex` 1,
+  fenced `yaml` reply). Evidence is in `.artifacts/ui-drift-2026-10-20/`. #4's session (a
+  marker-only seed, so no ChatGPT message) showed the new status line in job `9eb2537e`'s submit
+  reply and then failed at auth as expected.
+- Live eight-preset ChatGPT proof accepted on `00059ad` in one runner invocation (307 s) through
+  the operator's managed browser, every job recording `packageVersion 0.4.6` and this checkout:
+  `pro_standard` `ecc593b7` 42 s, `pro_extended` `9eafcd28` 39 s, `thinking_light` `ecca97a3`
+  37 s, `thinking_standard` `f22ed1ff` 36 s, `thinking_extended` `b1939dc3` 38 s,
+  `thinking_heavy` `ea065f50` 38 s, `instant` `c1cfd4e7` 38 s, `instant_auto_switch` `d35b3d1b`
+  37 s. All eight completed with both markers. `observedSelection` recorded the stops Pro, Pro,
+  Medium, Medium, High, Extra High, Instant, and Instant, with products `pro`, `pro`, four
+  `thinking`, and two `instant`. No picker reopen and no stale-stop reload fired.
+- Crabbox lanes on `00059ad`, with the Ubuntu image rebuilt for agent-browser 0.39.1: macOS
+  `platform-build` PASS (44.5 s) and `real-extension` PASS (5.2 s), Ubuntu `platform-build` PASS
+  (35.5 s) and `real-extension` PASS (4.0 s); `npm run release:check` passed as one composition
+  on the same clean tree (54 helper tests, 4 site tests, 2 documentation-link tests, sanity, and
+  `npm pack --dry-run`).
+- Published `omp-oracle@0.4.6` from `00059ad` under the founder's authorization (registry time
+  2026-10-20T12:22:04Z), after `npm login --auth-type=web` (the stored token answered `E401`);
+  both browser approvals completed within their windows. Registry `gitHead`
+  `00059ad23dedc423274643e7539a6763380c936e`, shasum `ebf5b645697bedd68de357e7135e44f745e53014`,
+  87 files, `latest` (visible after about four minutes of polling). Tag `v0.4.6` and the
+  [GitHub release](https://github.com/alphastorm/omp-oracle/releases/tag/v0.4.6) name the same
+  commit. Installed with `omp plugin uninstall omp-oracle` and
+  `omp plugin install omp-oracle@0.4.6` (dotfiles-private `c961f1e`).
+- Installed package on the operator's real configuration (a fresh print-mode session loading the
+  installed entry point): `pro_standard` job `cca94b8e` recorded `packageVersion 0.4.6` and the
+  installed path, completed 38 s after creation, and moved the slider from `Instant (1 of 5)` to
+  `Pro (5 of 5)`, returning the account's saved tier to `Pro`. Sessions started before the
+  install keep 0.4.5's extension code until restarted.
+- Not exercised: `/oracle-auth` against a real provider (the relaunch fix is proved with the real
+  0.39.1 driver against a loopback page and with the fake driver), and a live long-thinking or
+  Deep Research job on the rendered-stop change (the capture-proof replay covers those waits).
+
 #### 0.4.5 (2026-10-18, `a80242d`)
 
 - Scope: #1 (`5080f48`). `oracle_read`, `/oracle-status`, and `/oracle-read` find another project's
