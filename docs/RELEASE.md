@@ -154,6 +154,79 @@ time they were written, not this fork; current support claims live in
 Recorded by the fork under the `omp-oracle` name, on the maintainer's macOS workstation.
 Artifact run ids live under the gitignored `.artifacts/` root.
 
+#### 0.4.7 (2026-10-20, `567facf`)
+
+- Scope: #6 (`fabd8f3`): releases publish from `.github/workflows/release.yml` through npm
+  trusted publishing. #7 (`85a18ca`): the development baseline moves from `pi` 0.80.9 to 1.3.0 with
+  a portable `before_agent_start` guard, two sanity fixtures, and `allowScripts` denials; the
+  development audit drops from five findings to none. #8 (`719394b`): `@steipete/sweet-cookie`
+  0.3.0 to 0.4.4, and safe-storage overrides are scrubbed by name pattern. #9 (`1fc7031`): typed
+  `/oracle` input is consumed under Oh My Pi's `handled` contract as well as pi's `action`. #13
+  (`d5799d3`): `/oracle` and `/oracle-followup` route a blocked preflight to `/oracle-auth`.
+  Maintenance: #10 (`25ac097`) setup-node 7.1.0, #12 (`647af5d`) Dependabot ignores, #14
+  (`800e567`) tsx 4.23.15 and `@types/node` 22.20.5, #15 (`2f52f7c`) a sanity temp-directory leak,
+  #16 (`b4643de`) the Ubuntu image on `cimg/node:24.22`. Dependabot alerts, security updates, and
+  version updates were enabled on the fork the same day. Upstream `pi-oracle` `main` was still
+  `d658a98`.
+- Red before, green after, as recorded in the pull requests: on `pi` 1.3.0 the old guard failed
+  `tsc` (`TS2339` on `event.prompt`) and two poller sanity fixtures failed their in-memory-history
+  precondition (#7); the scrub test extended with `SWEET_COOKIE_CHROMIUM_SAFE_STORAGE_PASSWORD`
+  failed on the fixed name list (#8); for one typed `/oracle`, the published 0.4.6 package on Oh
+  My Pi 18.12.3 recorded two user messages and two `oracle-dispatch-request` entries and the fixed
+  branch one of each, and the extended input-handler sanity test failed before the fix (#9); a
+  sanity run added one `/tmp/oracle-runtime-*` directory before #15 and none after. A Linux
+  container read a fixture Chromium profile through the worker's import path: `v10` cookies
+  decrypted identically on 0.3.0 and 0.4.4, a `v11` cookie decrypted on 0.3.0 only with the Chrome
+  override and on 0.4.4 only with the Chromium override, and 0.4.4 skipped a partitioned cookie
+  with a warning (#8).
+- Live eight-preset ChatGPT proof accepted on `567facf` in one runner invocation (310 s) through
+  the operator's managed browser, the checker matching every job's `extensionProvenance` to
+  0.4.7 at `567facf`: `pro_standard` `4056781b` 47 s, `pro_extended` `5cb7fa45` 37 s,
+  `thinking_light` `3d71a96d` 37 s, `thinking_standard` `75068acb` 37 s, `thinking_extended`
+  `268edd2b` 37 s, `thinking_heavy` `2e8fc771` 37 s, `instant` `f8e0ad06` 38 s,
+  `instant_auto_switch` `fc969229` 37 s. `observedSelection` recorded the stops Pro, Pro, Medium,
+  Medium, High, Extra High, Instant, and Instant. No picker reopen and no stale-stop reload fired.
+- `npm run release:check` passed on `567facf` as one composition (142 s): 54 helper tests
+  (including the native status smoke on `pi` 1.3.0), 4 site tests, 2 documentation-link tests,
+  sanity, `npm pack --dry-run` (87 files), the proof check, the doctor, and the Crabbox lanes:
+  macOS `platform-build` PASS (43.1 s, `run-1792528477327-j9c7wo`) and `real-extension` PASS
+  (4.5 s, `run-1792528520475-rmvbk3`); Ubuntu, on the image rebuilt from `cimg/node:24.22` (node
+  24.22.0, npm 11.19.1, agent-browser 0.39.1), `platform-build` PASS (32.5 s,
+  `run-1792528490614-nwavgu`) and `real-extension` PASS (3.6 s, `run-1792528523121-iqdm2x`).
+- First trusted publish. After `npm login --auth-type=web`, `npm trust github omp-oracle --file
+  release.yml --repo alphastorm/omp-oracle --allow-publish --yes` created trust configuration
+  `0c9f897f` (permissions `publish` and `stage publish`); the founder approved both in the
+  browser. Under his authorization, tag `v0.4.7` on `567facf` started release run
+  [`39493324352`](https://github.com/alphastorm/omp-oracle/actions/runs/39493324352): `verify`
+  (20:35:51 to 20:37:21 UTC) packed shasum `1881d0971c833330141486bfadc9945b8b347c2c` (87 files,
+  349.9 kB), and `publish` (20:37:23 to 20:37:37 UTC) signed the provenance statement (Sigstore
+  log index 3343187837) and printed `+ omp-oracle@0.4.7`. The registry (visible after about 170 s
+  of polling; time 2026-10-20T20:40:44Z) reports the same `dist.shasum` and integrity, 87 files,
+  `latest`, and no `gitHead`, which a tarball publish does not carry. The provenance attestation
+  names commit `567facf`, `refs/tags/v0.4.7`, `.github/workflows/release.yml`, and run
+  39493324352 attempt 1; `npm audit signatures` on a clean install reported 2 verified registry
+  signatures and 1 verified attestation. A local dry-run pack of the same tree on Node 26 gave
+  shasum `4d867e4d4fdbef12f33f91caf253b124db709b6f` (different gzip bytes, as documented under
+  [Publishing](#publishing)). Afterwards `npm access set mfa=publish omp-oracle` (Require
+  two-factor authentication and disallow tokens) exited 0 after the founder's approval; the
+  setting was not read back. Tag `v0.4.7` and the
+  [GitHub release](https://github.com/alphastorm/omp-oracle/releases/tag/v0.4.7) name `567facf`.
+- Installed with `omp plugin uninstall omp-oracle` and `omp plugin install omp-oracle@0.4.7` on
+  Oh My Pi 18.12.3 (dotfiles-private `ca4d054`, committed by the plugins worktree sync and
+  pushed). sf-studio (Oh My Pi 18.12.4): the frozen-lockfile dry run passed on
+  `origin/omp-plugins`, then `git pull --ff-only` and `bun install --frozen-lockfile`; the
+  worktree ended clean and even with origin, and an isolated print-mode `oracle_preflight` from the
+  installed entry point reported ready.
+- Installed package on the operator's real configuration (a fresh print-mode session loading the
+  installed entry point): `pro_standard` job `a0729ded` recorded `packageVersion 0.4.7` and the
+  installed path with no `gitHead`, completed 38 s after creation, and moved the slider from
+  `Instant (1 of 5)` to `Pro (5 of 5)`, returning the account's saved tier to `Pro`. The
+  `omp-session-gateway` session (started 09:35) and the release session started before the
+  install and keep 0.4.6's extension code until restarted.
+- Not exercised: `/oracle-auth` cookie import against a real browser profile (a macOS read
+  prompts for the Keychain, and the container had no Linux keyring daemon), Deep Research, Grok,
+  and Windows native.
+
 #### 0.4.6 (2026-10-19, `00059ad`)
 
 - Scope: the workstation's `agent-browser` moved from 0.35.0 to 0.39.1 (global npm install,
