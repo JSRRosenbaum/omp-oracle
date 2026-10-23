@@ -73,6 +73,7 @@ poller, status footer, and command interceptors; `session_shutdown` stops the po
 - `/oracle-cancel <job-id>` — cancels a `queued` or active job by explicit id.
 - `/oracle-clean <job-id|all>` — runs runtime teardown if needed and removes job directories for terminal jobs outside the
   post-wake-up retention grace window.
+- `/oracle-index refresh|status|search <query>|read <id-or-url> [offset] [max-chars]` — refreshes, inspects, locally searches metadata, or reads one selected conversation with bounded paging.
 
 ### Tools
 
@@ -86,8 +87,8 @@ conversion accept them. The extension also exposes a host-internal programmatic 
 - `oracle_auth` — agent-facing auth refresh mirror of `/oracle-auth` for stale-auth recovery before a single retry.
 - `oracle_submit` — builds the context archive, acquires runtime and conversation leases (or queues the job), writes job
   state, and spawns the detached worker. Accepts optional `followUpJobId` or `chatGptConversationId`.
-- `oracle_read` — reads job status, send state, collection fidelity, and response text; `action: "recollect"` re-runs bound
-  collection on a completed job without sending a prompt.
+- `oracle_index` — refreshes or locally searches/statuses ChatGPT metadata (title, id, URL, timestamps, archived state, project id), or explicitly reads one selected conversation. Search/status remain local and metadata-only. Refresh lists metadata; `read` fetches only the chosen conversation and selected visible branch, with bounded paging and media/tool/reasoning omissions. The index remains transcript-free and no extra transcript cache is written, but returned text enters ordinary agent session logs. Refresh is restricted to managed/relay authenticated browser transport; private API behavior may change and results are not guaranteed exhaustive.
+- `oracle_read` — reads job status, send state, collection fidelity, and response text; `action: "recollect"` re-runs bound collection on a completed job without sending a prompt.
 - `oracle_cancel` — cancels a queued or active job by id.
 
 Read/status lookup uses an explicit `projectId` if supplied, otherwise the current project.
@@ -98,6 +99,12 @@ external-cwd submission directly by id, with no index file. A different owning p
 error naming that root and the explicit retry, never its saved response. No-id status listing
 stays scoped to the selected project, and cancel, cleanup, follow-up, and wake-up session
 ownership are unchanged.
+
+The index is stored under the agent directory and bound to browser source and account identity; refresh replaces one source/account snapshot only after successful enumeration and does not merge accounts. Status/search expose that last-refreshed snapshot and do not authenticate to identify the currently signed-in account; refresh after switching accounts or workspaces. Metadata includes user/account identifiers, titles, conversation ids/URLs, timestamps, archived state, and project ids, but excludes email, credentials, tokens, and transcript text. Listed history can be incomplete even when pagination ends normally.
+
+`oracle_index` search remains local metadata matching, not transcript-content search. `read` requires an indexed conversation belonging to the same user/account snapshot and uses the private ChatGPT conversation API to fetch only that selection. It returns a selected visible branch (not all branches), with zero-based UTF-16 character offsets and `maxChars` 1000–60000 (default 16000); output excludes hidden/system/developer/tool/reasoning messages and may use explicit media/attachment placeholders. It does not fetch media, add a chat message, or create an extra transcript cache, although returned text is recorded in normal agent session logs. Private API behavior is not a stable public contract.
+
+`oracle_submit.chatGptConversationId` is write-capable and should be used only when the user explicitly wants to ask ChatGPT in an existing conversation: it adds a message. For read-only inspect/recall, prefer `oracle_index` action `read`. Ambiguous search results require user disambiguation; omitted target preserves fresh-thread behavior.
 
 ## High-level flow
 
@@ -120,8 +127,10 @@ dispatch prompt instructs the agent to:
 6. craft the prompt, call `oracle_submit`, and end the turn with a terse dispatch summary so the session returns to idle for
    the completion wake-up
 
-Dispatched and queued submit responses forbid polling and name `oracle_read` with the job's `jobId` for a later
-user-requested status check before the one-time completion wake-up in the submitting session.
+Dispatched and queued submit responses require ending the current run, forbid polling or active sleep/wait
+calls, and name `oracle_read` with the job's `jobId` for a later user-requested status check. This also
+applies to direct tool callers: completion is an idle-gated follow-up, not an in-run callback. Print and
+JSON modes disable the poller and require reading the saved job in a later invocation.
 
 ### `/oracle-auth`
 
@@ -162,7 +171,7 @@ Submission executes in strict archive-before-admission order:
    exists and carries a non-empty `.oracle-seed-generation` marker
 2. resolve the provider and preset or mode into a `selection` snapshot
 3. resolve optional thread targeting: `followUpJobId` into a prior oracle job `chatUrl` and `conversationId`, or
-   `chatGptConversationId` into a user/browser-created ChatGPT `https://chatgpt.com/c/<id>` URL. Omit both for the default fresh-thread behavior.
+   `chatGptConversationId` into a user/browser-created ChatGPT `https://chatgpt.com/c/<id>` URL (supplied by the user or selected from `oracle_index` only for explicit recall/continuation). Omit both for the default fresh-thread behavior.
 4. resolve project-relative `files` inside the project root (rejecting missing paths with `archive_input_missing` and
    rejecting symlink escapes), apply default exclusions when expanding `.` or directories while archiving explicitly named
    files or directories as named, auto-prune oversized generic generated-output directories outside source roots (`src/`,

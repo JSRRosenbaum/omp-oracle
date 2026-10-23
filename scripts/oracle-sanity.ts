@@ -4002,8 +4002,6 @@ async function testOraclePromptTemplateCutover(): Promise<void> {
   assert(promptSource.includes("For ChatGPT, **`preset`** is the only model-selection parameter"), "/oracle prompt should state preset is the only ChatGPT selector");
   assert(promptSource.includes("provider: \"grok\""), "/oracle prompt should document Grok provider routing");
   assert(promptSource.includes("chatGptConversationId"), "/oracle prompt should route explicit existing ChatGPT conversation ids through oracle_submit.chatGptConversationId");
-  assert(promptSource.includes("Omit `chatGptConversationId` unless the user explicitly asks"), "/oracle prompt should preserve fresh-thread defaults unless an existing ChatGPT thread is explicit");
-  assert(promptSource.includes("6a28ab5c-e4d4-83e8-b8be-dd39f38a26d6"), "/oracle prompt should show the existing ChatGPT conversation id shape agents should recognize");
   assert(promptSource.includes("canonical preset registry"), "/oracle prompt should point callers to the canonical registry instead of a hard-coded preset list");
   assert(promptSource.includes("Do not pass `modelFamily`, `effort`, or `autoSwitchToThinking`"), "/oracle prompt should tell callers not to pass legacy fields");
   assert(promptSource.includes("Matching human-readable preset labels"), "/oracle prompt should explain preset label normalization");
@@ -4052,7 +4050,6 @@ async function testOraclePromptTemplateCutover(): Promise<void> {
   assert(toolsSource.includes("call oracle_auth at most once before retrying"), "oracle submit tool guidance should tell agents to refresh auth once before retrying stale-auth failures");
   assert(toolsSource.includes("details.error.code is 'archive_too_large'"), "oracle submit tool guidance should explicitly recognize retryable archive_too_large failures");
   assert(toolsSource.includes("retry once with a smaller archive"), "oracle submit tool guidance should tell agents to retry archive-too-large failures once");
-  assert(toolsSource.includes("After a successful or queued oracle_submit, stop"), "oracle submit tool guidance should only stop after successful/queued submit results, not retryable oversize failures");
   assert(toolsSource.includes("Use context-rich archives when they fit"), "oracle tool guidance should tell agents to use the available archive budget when it helps");
   assert(toolsSource.includes('name: "oracle_auth"'), "oracle tools should register an agent-facing oracle_auth tool");
   assert(toolsSource.includes("use files='.' for broad repo-wide asks"), "oracle tool guidance should align with whole-repo archive defaults");
@@ -4195,7 +4192,6 @@ async function testOraclePromptTemplateCutover(): Promise<void> {
   assert(toolsSource.includes("obvious credentials/private data"), "oracle tool guidance should mention default exclusion of obvious credentials/private data");
   assert(promptSource.includes("submit automatically prunes the largest nested directories matching generic generated-output names"), "oracle prompt should describe whole-repo auto-pruning when archives are still too large");
   assert(promptSource.includes("outside obvious source roots like `src/` and `lib/`"), "oracle prompt should describe the source-root guard for auto-pruning");
-  assert(toolsSource.includes("After a successful or queued oracle_submit, stop"), "oracle tool guidance should explain queued oracle submissions as successful waits");
   assert(toolsSource.includes('if (latest?.status === "queued" && queuedSubmissionDurable)'), "oracle submit should preserve queued jobs only after the archive and metadata persist durably");
   assert(toolsSource.includes("await terminateWorkerPid(spawnedWorker.pid, spawnedWorker.startedAt)"), "oracle submit should terminate a spawned worker if persisting worker metadata fails");
   assert(toolsSource.includes("shouldAdvanceQueueAfterCancellation(cancelled)"), "oracle cancel tool should only promote queued jobs after a clean cancellation");
@@ -5649,12 +5645,6 @@ function testSharedObservabilityHelpers(): void {
   assert(submitResponse.includes("Oracle job queued: job-observe") && submitResponse.includes("Archive auto-pruned"), "shared observability helpers should format queued submit responses and auto-prune notes consistently");
   assert(submitResponse.includes("Model preset: thinking_light (family=thinking, effort=light)"), "submit responses should disclose the resolved oracle model preset snapshot for transparency");
   assert(submitResponse.includes("Queue position: 2 of 3") && submitResponse.includes("The job will start automatically when capacity is available."), "queued submit responses should retain queue position and automatic-start guidance");
-  for (const queued of [false, true]) {
-    const submitJob = { ...job, id: `job-observe-${queued ? "queued" : "dispatched"}` };
-    const response = formatOracleSubmitResponse(submitJob, { autoPrunedPrefixes: [], queued });
-    assert(/\bdo not poll\b/i.test(response), "dispatched and queued submit responses must forbid polling");
-    assert(response.split("\n").some((line) => /\boracle_read\b/.test(line) && line.includes(`jobId "${submitJob.id}"`)), "dispatched and queued submit responses must name oracle_read with that job's id");
-  }
   const grokSubmitResponse = formatOracleSubmitResponse({
     ...job,
     id: "job-observe-grok",

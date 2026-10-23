@@ -107,7 +107,7 @@ const ORACLE_SUBMIT_PARAMS = Type.Object({
   mode: ORACLE_GROK_MODE_PARAM,
   followUpJobId: Type.Optional(Type.String({ description: "Earlier oracle job id whose chat thread should be continued." })),
   chatGptConversationId: Type.Optional(Type.String({
-    description: "Existing ChatGPT conversation id, or full https://chatgpt.com/c/... URL, to continue. Omit for default behavior: starting a fresh oracle thread. Do not combine with followUpJobId.",
+    description: "Existing ChatGPT conversation id or https://chatgpt.com/c/... URL to continue. May be supplied by the user or selected from oracle_index results only when the user wants to ask ChatGPT in that existing conversation; continuing adds a message. For inspect/recall without a new message, prefer oracle_index action read. Omit for the default fresh thread. Do not combine with followUpJobId.",
     minLength: 1,
     pattern: "^.*[^ \\t\\r\\n].*$",
   })),
@@ -117,7 +117,7 @@ const ORACLE_PREFLIGHT_PARAMS = Type.Object({
   provider: ORACLE_PROVIDER_PARAM,
   followUpJobId: Type.Optional(Type.String({ description: "Earlier oracle job id whose provider/thread readiness should be checked." })),
   chatGptConversationId: Type.Optional(Type.String({
-    description: "Existing ChatGPT conversation id, or full https://chatgpt.com/c/... URL, whose provider/thread readiness should be checked. Do not combine with followUpJobId.",
+    description: "Existing ChatGPT conversation id, or full https://chatgpt.com/c/... URL, whose provider/thread readiness should be checked. For read-only inspection use oracle_index action read instead; this target is for submissions that add a message. Do not combine with followUpJobId.",
     minLength: 1,
     pattern: "^.*[^ \\t\\r\\n].*$",
   })),
@@ -914,7 +914,8 @@ export function registerOracleTools(pi: ExtensionAPI, workerPath: string, authWo
     description: "Check whether oracle is ready in this session before spending time gathering context or preparing a submission.",
     promptSnippet: "Check oracle readiness before expensive /oracle preparation.",
     promptGuidelines: [
-      "Call oracle_preflight before doing expensive /oracle preparation. Pass provider='grok' when the user explicitly asks for Grok, followUpJobId for same-thread follow-ups from oracle-created jobs, or chatGptConversationId when the user explicitly provides an existing ChatGPT browser conversation id/URL. If ready is false, stop immediately and report the suggested next step instead of reading files or crafting archive inputs.",
+      "Call oracle_preflight before doing expensive /oracle preparation. Pass provider='grok' when the user explicitly asks for Grok, followUpJobId for same-thread follow-ups from oracle-created jobs, or chatGptConversationId when the user explicitly provides an existing ChatGPT browser conversation id/URL or has explicitly selected an oracle_index result for requested message-adding continuation. If ready is false, stop immediately and report the suggested next step instead of reading files or crafting archive inputs.",
+      "Use oracle_index action read for inspecting/recalling a selected indexed ChatGPT conversation without sending a message; ask the user to disambiguate plausible matches. Use chatGptConversationId only when the user explicitly wants to ask ChatGPT in that existing conversation, because oracle_submit adds a message.",
     ],
     parameters: ORACLE_PREFLIGHT_PARAMS,
     prepareArguments: (args) => prepareOracleProviderAliases(args, "oracle_preflight"),
@@ -965,16 +966,17 @@ export function registerOracleTools(pi: ExtensionAPI, workerPath: string, authWo
     label: "Oracle Submit",
     description:
       "Dispatch a background ChatGPT or Grok web oracle job after gathering context. Always pass a prompt and exact project-relative archive inputs. " +
+      "After successful or queued submission, return the job id and response path and end the current run. Do not stay active waiting, sleeping, or polling: completion wake-ups are best-effort follow-ups delivered only when the session is idle with no pending messages, not callbacks that interrupt an active run. Print and JSON modes have no automatic wake-up; read the saved job in a later invocation. " +
       "Optional provider: set `provider` to `grok` when the user asks for Grok; Grok currently supports only Heavy. Optional ChatGPT model: set parameter `preset`, or omit it for configured defaults; canonical preset ids are listed in the README and ORACLE_SUBMIT_PRESETS registry, and matching labels are normalized at submit time. " +
-      "Optional thread target: pass `chatGptConversationId` only when the user explicitly provides an existing ChatGPT browser conversation id/URL to continue; omit it for the default fresh oracle thread.",
+      "Optional thread target: pass chatGptConversationId only when the user explicitly wants to ask ChatGPT in an existing conversation supplied by id/URL or specifically selected from oracle_index; submission adds a message. For viewing/recalling the transcript without a new message, prefer oracle_index action read. If index results are ambiguous, ask which chat to inspect or continue. Omit it by default to start a fresh thread.",
     promptSnippet: "Dispatch a background ChatGPT or Grok web oracle job after gathering repo context.",
     promptGuidelines: [
       "Call oracle_preflight first, then gather enough context to choose archive inputs before oracle_submit.",
       "Use context-rich archives when they fit; use files='.' for broad repo-wide asks. Default exclusions already skip common bulky outputs and obvious credentials/private data.",
-      "Pass chatGptConversationId only when the user explicitly provides an existing ChatGPT conversation id/URL; otherwise omit it for a fresh thread.",
+      "Pass chatGptConversationId only when the user explicitly asks to continue a ChatGPT thread and provides its id/URL or selects a specific oracle_index result. Continuing adds a message to that chat; if multiple indexed chats match, ask the user to choose. Otherwise omit it for a fresh thread.",
       "If auth is stale, call oracle_auth at most once before retrying. If oracle_auth fails, stop and report it.",
       "If details.error.code is 'archive_too_large', retry once with a smaller archive using the reported size/pruning details; do not loop.",
-      "After a successful or queued oracle_submit, stop and report only the dispatch summary. Do not keep working while the oracle job runs, and do not poll; if the user later asks for status, call oracle_read with the returned jobId.",
+      "After a successful or queued oracle_submit, return only the job id and response path and end the current run so the session becomes idle. Do not wait in a tool call, sleep, poll, or assume a generic background-job wait can await oracle jobs. Completion is a best-effort follow-up, not an in-run callback; print and JSON modes require reading the saved job in a later invocation. If the user later asks for status, call oracle_read with the returned jobId.",
       "For ChatGPT, use preset only when the user requests model control; otherwise omit it. For Grok, pass provider='grok' and omit preset.",
     ],
     parameters: ORACLE_SUBMIT_PARAMS,

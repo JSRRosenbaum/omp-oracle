@@ -250,8 +250,10 @@ the built-in generic Chromium cookie reader and prompts for macOS Keychain acces
   before building an archive.
 - **Wake-ups and reading (`oracle_read`, `/oracle-read`, `/oracle-status`).** Completion delivery into the
   host session is one best-effort wake-up per finished job, sent only while the session is idle with nothing
-  queued. Agents must not poll; if the user asks for status before the wake-up, call `oracle_read({ jobId })`
-  with the submitted job's id. Jobs that finish together arrive as one batched message, and an `oracle_read`
+  queued. After successful or queued submission, agents must return the job id and response path and end
+  the current run, not stay active waiting in a tool call or sleeping. Agents must not poll; if the user
+  later asks for status, call `oracle_read({ jobId })` with the submitted job's id.
+  Jobs that finish together arrive as one batched message, and an `oracle_read`
   (or `/oracle-read` / `/oracle-status`) by the job's own session settles the wake-up first. The job directory is the durable
   record: run `/oracle-status [job-id]` to inspect a job or list recent job ids, `/oracle-read [job-id]` to
   read the saved response preview, or `oracle_read({ jobId })` from an agent turn.
@@ -259,6 +261,7 @@ the built-in generic Chromium cookie reader and prompts for macOS Keychain acces
   `oracle_submit`) to continue a job in the same provider thread, or pass `chatGptConversationId` to continue
   an existing browser ChatGPT URL/id. Run `/oracle-cancel <job-id>` (or `oracle_cancel({ jobId })`) to stop a
   queued or active job.
+
 - **Cleaning and retention.** `/oracle-clean <job-id|all>` runs runtime cleanup and deletes terminal job
   directories. It refuses non-terminal jobs, jobs whose worker is still live, and jobs inside the short
   post-send retention grace window right after a wake-up was sent, returning a `Retry after ...` timestamp.
@@ -276,6 +279,17 @@ the built-in generic Chromium cookie reader and prompts for macOS Keychain acces
   substituting text from another page. `promptSendState` in `job.json` (`prompt-send-state` in `oracle_read`)
   is `not_sent`, `attempted`, or `accepted`, showing whether resubmitting is safe. To retry capture of a
   completed turn without sending a prompt, run `oracle_read({ jobId, action: "recollect" })`.
+## Conversation metadata index
+
+`/oracle-index refresh` or `oracle_index({ action: "refresh" })` enumerates ChatGPT conversation metadata through the configured authenticated **managed browser or existing-Chrome relay**. Refresh requires that browser transport; it does not fall back to isolated cookie-seed auth, submit a model prompt, add a chat message, or download transcripts. A replacement snapshot is published only after successful enumeration; failed refresh leaves the previous cache intact.
+
+`/oracle-index status` and `oracle_index({ action: "status" })` inspect the local snapshot without launching a browser or authenticating. Search is likewise local: `/oracle-index search <query>` or `oracle_index({ action: "search", query, limit })` matches title, conversation id, and project id metadata—not transcript content. Search limit is 1–200 (default 20).
+
+The private index is stored under the agent directory, separated by browser-source identity and bound to account identity. It includes conversation title, id, `https://chatgpt.com/c/<id>` URL, timestamps when available, archived status, and project id when available; it excludes email, tokens, credentials, and transcript text. Status/search report the last-refreshed account snapshot, not necessarily the currently signed-in account; refresh after switching accounts or workspaces. Listed metadata is not guaranteed exhaustive.
+
+For read-only inspection, use search to identify one conversation and have the user select a specific result if more than one is plausible. Then call `/oracle-index read <id-or-url> [offset] [max-chars]` or `oracle_index({ action: "read", conversationId, offset, maxChars })`. Offset is a zero-based UTF-16 character offset; maxChars is 1000–60000 (default 16000). Read requires indexed membership and the same user/account snapshot, and fetches only the selected conversation from ChatGPT's private conversation API; private API access can fail or change. It returns only the selected visible branch with bounded transcript text, omitting hidden/system/developer/tool/reasoning messages and using explicit placeholders for unsupported media or attachments. It does not fetch media, submit a prompt, or add a message. No transcript is written into the metadata index or an extra transcript cache, but returned text is recorded in ordinary agent session logs.
+
+Use `chatGptConversationId` with `/oracle` or `oracle_submit` only when the user wants to ask ChatGPT in that existing conversation; this is a write-capable continuation that adds a message. For inspect/recall without a new message, prefer `read`. Ambiguous results must be clarified, never silently selected. `/oracle-followup` continues an earlier oracle job and takes a job id, not a ChatGPT conversation id.
 
 ## Troubleshooting
 
@@ -325,6 +339,10 @@ Complete the challenge in the headed bootstrap browser (or in the relay/managed 
 Exit the `--no-session` run (`omp --no-session` or `pi --no-session`), start a normal persisted session, and run `/oracle` again.
 
 ### A job finished but no wake-up arrived
+
+Completion is a follow-up, not an interrupt: a busy session or one with pending messages defers delivery.
+End the submitting agent run after its dispatch summary; active sleep or wait calls keep it busy.
+Print and JSON modes do not run the completion poller, so inspect the saved job in a later invocation.
 
 Run `/oracle-status` to list recent job ids for the project, then run `/oracle-read <job-id>` (or call `oracle_read({ jobId })`) to read the saved response from disk.
 

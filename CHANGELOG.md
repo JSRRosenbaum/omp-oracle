@@ -4,6 +4,15 @@ Versions from `0.1.0` are `omp-oracle` releases; the numbering restarts for the 
 identity and does not continue upstream `pi-oracle`'s `0.7.x` line. The inherited upstream
 history is kept below the divider.
 
+## Unreleased
+
+### Added
+- Added `oracle_index` and `/oracle-index` for metadata-only ChatGPT conversation discovery. Local search/status never contact the browser; refresh uses the configured authenticated managed/relay browser, does not send prompts or download transcripts, and stores account/source-scoped listed metadata with a completeness caveat. Explicitly selected results may be continued only on user request; submission adds a message to that chat, while normal `/oracle` remains fresh-thread by default.
+- Added explicit `oracle_index` / `/oracle-index read` retrieval for a selected indexed conversation, with bounded visible-branch paging and media/tool/reasoning omissions. The metadata index remains transcript-free; explicit retrieval writes no extra transcript cache, while returned text is recorded in normal agent session logs. Read does not add a ChatGPT message; `oracle_submit` continuation remains write-capable and adds one.
+
+### Fixed
+- Direct `oracle_submit` descriptions and results explicitly tell agents to end the active run after dispatch instead of sleeping or waiting for an in-run callback. Command prompts and docs explain idle-only follow-up delivery and the absence of automatic wake-ups in print/JSON modes; notification scheduling is unchanged.
+
 ## 0.4.7 - 2026-10-20
 
 ### Changed

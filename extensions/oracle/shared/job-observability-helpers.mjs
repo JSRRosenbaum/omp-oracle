@@ -291,7 +291,9 @@ export function formatOracleSubmitResponse(job, options) {
     `Response will be written to: ${job.responsePath}`,
     formatOracleLifecycleEvent(getLatestOracleJobLifecycleEvent(job)) ? `Last event: ${formatOracleLifecycleEvent(getLatestOracleJobLifecycleEvent(job))}` : undefined,
     options.queued ? "The job will start automatically when capacity is available." : undefined,
-    `Do not poll; the one-time completion wake-up arrives in this session. If the user asks for status before then, call oracle_read with jobId "${job.id}".`,
+    "Return the job id and response path, then end the current run. Do not stay active waiting in a tool call, sleeping, or polling; a generic background-job wait does not await oracle jobs.",
+    "Completion is a best-effort follow-up delivered only when the session is idle with no pending messages, not a callback that interrupts an active run. Print and JSON modes have no automatic wake-up; read the saved job in a later invocation.",
+    `Do not poll. If the user later asks for status, call oracle_read with jobId "${job.id}".`,
   ]
     .filter(Boolean)
     .join("\n");

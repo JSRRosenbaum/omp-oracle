@@ -16,6 +16,7 @@ import { refreshOracleStatus, setOracleReadiness, startPoller, stopPoller } from
 import { promoteQueuedJobs } from "./lib/queue.js";
 import { assertOracleSubmitPrerequisites, hasPersistedSessionFile } from "./lib/runtime.js";
 import { classifyOracleReadinessError, registerOracleTools } from "./lib/tools.js";
+import { registerOracleIndex } from "./lib/index-tools.js";
 
 const PROGRAMMATIC_API_SYMBOL = Symbol.for("omp.pi-oracle.programmatic.v1");
 type ProgrammaticToolDefinition = {
@@ -75,6 +76,7 @@ export default function oracleExtension(pi: ExtensionAPI) {
   const oracleFollowupPrompt = readPromptTemplate(join(promptDir, "oracle-followup.md"));
 
   registerOracleCommands(pi, authWorkerPath, workerPath);
+  registerOracleIndex(pi);
   const programmaticTools = new Map<string, ProgrammaticToolDefinition>();
   const nativeRegisterTool = pi.registerTool.bind(pi);
   const capturingPi = new Proxy(pi, {

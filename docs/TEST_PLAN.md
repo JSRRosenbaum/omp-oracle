@@ -20,6 +20,16 @@ Companion docs: [Architecture](ARCHITECTURE.md) · [Operations](OPERATIONS.md) �
 | Publish / release gate | `npm run release:check` ([Release](RELEASE.md#release-gate)) | Runs `npm run verify:oracle`, `npm run release:proof:chatgpt-presets`, and `npm run smoke:platform:all`. Passes before the release tag is pushed, which publishes through trusted publishing ([Release → Publishing](RELEASE.md#publishing)); `prepublishOnly` also enforces it for a local `npm publish`. |
 | Brand artwork (`assets/*.html`) | `npm run render:assets`, then `npm run render:assets -- --check` ([Branding](BRANDING.md)) | Re-renders `assets/banner.png` and `assets/og.png` from `assets/*.html` and verifies dimensions and same-machine byte equality. |
 
+## Conversation metadata index
+
+When changing `oracle_index` or `/oracle-index`, validate the loaded extension exposes both surfaces and exercise `refresh`, `status`, `search`, and `read` against a disposable agent directory. Local search/status must not launch a browser, authenticate, perform network I/O, or add a ChatGPT message; they report the last-refreshed account snapshot, and switching accounts/workspaces requires explicit refresh. Refresh must use only configured managed/relay auth, publish only a complete successful snapshot, and leave the previous cache unchanged on failed enumeration. Confirm refresh/search/status output contains metadata only and a listed-history completeness caveat, with no email, token, transcript, or raw browser/auth log; title control characters and newlines must be escaped so they cannot forge output lines.
+Exercise `read` with an indexed full id and canonical ChatGPT URL, plus a missing/invalid id and wrong-account/membership case. It must fetch only the selected conversation, preserve exact visible text, and provide selected title/id/URL, message count, total characters, offset, and nextOffset. Verify branch traversal excludes hidden/system/developer/tool/assistant tool-directed/reasoning content, handles media with explicit placeholders/omission notice, rejects malformed/cyclic history rather than returning partial history, and does not fetch media or add a message. Check bounded UTF-16 paging at offset zero and later offsets, maxChars default 16000, inclusive limits 1000 and 60000, invalid ranges, and surrogate pairs at generated boundaries. The index and any persistent cache must contain no transcript; state plainly that returned text appears in normal agent session logs and private conversation API behavior can change.
+
+For `/oracle-index read`, accept exactly `<id-or-url> [offset] [max-chars]`; reject missing id, fractional/negative/nonnumeric/out-of-range scalars, and extra arguments rather than coercing or ignoring them. Existing refresh/status/search syntax must remain unchanged.
+
+For continuation policy, use search to find unique and ambiguous metadata results. Only an explicitly user-selected result may reach `oracle_submit.chatGptConversationId`, and only for user-requested message-adding continuation; ambiguous matches must ask the user, default submissions omit the id, and `/oracle-followup` still requires an oracle job id. Prefer read for inspect/recall. Refresh contacts ChatGPT's authenticated conversation-list API but never submits a model prompt; local search/status require no browser, provider, or network access.
+
+
 ## Isolated `pi` session smoke
 
 Use this repeatable pre-commit workflow for code changes when you need end-to-end evidence beyond `npm test`. It validates that:
@@ -169,9 +179,15 @@ echo "TEST_ROOT=$TEST_ROOT"
 **Test 1 (whole-repo archive default exclusions):**
 
 - Expected: the isolated `pi` session loads the local extension and `oracle_submit` creates a job and archive path under `$TEST1_JOBS`.
-- Expected: the submit response forbids polling, describes the one-time completion wake-up in the submitting session, and names `oracle_read` with that job's `jobId` for user-requested status checks. `sanity:oracle` covers both dispatched and queued responses.
+- Expected: the submit response tells the agent to return the job id and response path and end the current run, rather than poll, sleep, or wait in another tool call. It explains idle-only follow-up delivery and the lack of automatic wake-ups in print/JSON mode, and names `oracle_read` with that job's `jobId` for later user-requested status checks.
 - Expected: expanding `.` excludes `.pi/`, `.oracle-context/`, `.cursor/`, and `.scratchpad.md` (`MISSING`), and includes normal repository files such as `README.md` (`FOUND`).
 - Why the fixture writes `.oracle-seed-generation`: this smoke test does not require `/oracle-auth`, but `oracle_submit` rejects missing or unverified seed profiles before archiving; an empty marker (`touch`) counts as unverified and is rejected at submit time. With a timestamped marker-only seed profile, the worker fails later due to missing real auth, leaving the archive on disk for inspection.
+
+To verify automatic delivery, use an isolated interactive session with the local extension, not print or
+JSON mode. Submit an `instant` job through the direct tool, let the agent end its run with a dispatch
+summary, and observe one completion follow-up that reads the saved result without user intervention.
+Ask the exercised agent for friction feedback. The poller sanity suite separately covers busy-to-idle
+delivery, pending-message deferral, batching, and origin-session reads suppressing deferred wake-ups.
 
 **Test 2 (symlink escape rejection):**
 
