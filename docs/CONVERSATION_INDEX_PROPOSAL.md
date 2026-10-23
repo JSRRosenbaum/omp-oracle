@@ -4,11 +4,19 @@
 
 Before submitting an implementation, we would like maintainer feedback on whether this belongs in OMP Oracle, in a companion package, or outside the project's scope.
 
-## Problem
+## Purpose: reuse existing threads and preserve Oracle continuity
 
-An agent can ask ChatGPT a question through Oracle, but recalling an older, existing ChatGPT discussion is a different operation. Starting another model turn to rediscover or summarize that discussion adds a message and can confuse original evidence with a new answer.
+Oracle already makes ChatGPT useful from an agent workflow. The opportunity here is to make that access useful for the conversations users already have, not only for new Oracle requests. A pre-existing thread can contain accumulated reasoning, decisions, constraints, research, and revisions that would be cumbersome to locate manually and reconstruct in another prompt.
 
-The desired workflow is explicit and read-only: locate an older chat, select it, and retrieve its existing visible conversation without sending a prompt to ChatGPT.
+The first goal is to streamline utilization of those threads: find a relevant conversation through a local metadata directory, retrieve its original visible discussion, and bring the relevant evidence into the current agent task. This should work for a chat begun directly in ChatGPT as well as one previously used through Oracle, rather than limiting recall to jobs created by the current local project.
+
+The second goal is continuity across different Oracle clients, hosts, and platforms. A canonical ChatGPT conversation ID/URL can serve as a durable reference to the same remote thread when work moves between the ChatGPT interface and compatible Oracle integrations, such as OMP and `pi`, or between machines. The intention is to keep using the accumulated conversation when explicitly requested, instead of treating a client or platform change as a reason to start over in a disconnected chat.
+
+For example, a user could explore a design in ChatGPT, retrieve its original decisions from an agent session, and later explicitly continue that same ChatGPT thread from another compatible Oracle client. Read-only retrieval and continuation are separate operations: retrieving existing evidence must not silently add a message, and continuing the thread requires an explicit request.
+
+The portable reference is the remote conversation identity, not a copied browser profile, a local Oracle job ID, or a globally synchronized transcript cache. Each client still needs authorized access to the same account/workspace and its own supported transport; local index snapshots remain account/browser-scoped. This is a continuity goal, not a claim that cross-machine/platform behavior has already been implemented or validated, nor a promise to migrate arbitrary local agent state or conversations between ChatGPT and another provider.
+
+Today, an agent can ask ChatGPT a question through Oracle, but discovering and retrieving an older discussion is a different operation. Starting another model turn to rediscover or summarize it adds a message and can confuse original evidence with a new answer. Explicit read-only discovery and retrieval provide the starting point for both goals, while preserving fresh-thread defaults when no existing thread is selected.
 
 ## Proposed interface
 
@@ -71,7 +79,7 @@ If the direction is welcome, the implementation contribution would include the s
 
 ## Maintainer questions
 
-1. Is read-only discovery and recall of older ChatGPT conversations useful and in scope for OMP Oracle?
+1. Is streamlined reuse of pre-existing ChatGPT threads, with an explicit conversation identity for continuity across Oracle clients/platforms, useful and in scope for OMP Oracle?
 2. Would you prefer an integrated opt-in tool, a companion package, or no addition here?
 3. Is the explicit private-API dependency acceptable with the limitations above, and is managed/relay-only coverage a reasonable initial supported scope?
 4. Does `oracle_index` with separate `refresh/search/status/read` actions fit the tool surface, or would a different boundary be preferable?

@@ -26,7 +26,7 @@ it lands.
 
 ## Proposals
 
-- [Conversation index and selected-chat recall](CONVERSATION_INDEX_PROPOSAL.md) — design discussion only; proposed read-only history discovery, retrieval, and packaging boundary, not a supported feature.
+- [Conversation index and selected-chat recall](CONVERSATION_INDEX_PROPOSAL.md) — design discussion only; reuse pre-existing ChatGPT threads and support continuity across Oracle clients/platforms through explicit discovery, retrieval, and thread identity; not a supported feature.
 
 ## Dated records
 
